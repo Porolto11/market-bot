@@ -52,7 +52,7 @@ Evidence from docs/RESEARCH.md that shapes P1:
 - **Minimum fees:** 11.99 EUR for Nordic, Swiss, Spanish and Italian listings (e.g. Novo Nordisk on .CO). Done (fees.MARKET_MIN, by exchange suffix).
 - **Buy taxes:** France 0.4% (LVMH, Airbus, Schneider), Spain/Italy 0.2%, UK 0.5%, Irish shares 1%. Done (fees.buy_tax; ETFs exempt).
 - **Package:** the fee rate is set per package (Platinum 0.24% … Start 0.34%).
-- **Tax certificate date:** 31 January.
+- **Tax certificate date:** 31 January. Done (/tax, the December check, docs/RESEARCH.md).
 - **Later:** import the WebTrader Excel export of transactions.
 - **Multi-currency cash.** Platinum accounts can hold USD, EUR and HUF. Done (state.book per currency, scan.pay;
   conversions only from HUF; still to check in WebTrader whether USD/EUR cash can really be held).

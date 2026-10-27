@@ -191,3 +191,11 @@ def test_switch_counts_the_buy_side_tax_of_the_pick():
     m = int(out[0][0].split("buy ")[1].split("×")[0])
     fees = 3.49 * 350 + (max(m * 200 * 0.0024, 3.49) + m * 200 * 0.004) * 400
     assert f"fees ≈ {fmt.approx(fees)} HUF" in out[0][0]
+
+
+def test_tax_texts_give_the_31_january_certificate_date():
+    log = [dict(t="buy", sym="A", qty=1, price=100, ccy="HUF", fx=1.0, fee=0, at="2026-03-01T10:00:00+00:00")]
+    r = tax.report(log, datetime(2026, 10, 27, tzinfo=timezone.utc), {}, RATES)
+    assert "📄 K&H sends the tax certificate (adóigazolás) for 2026 by 31 January 2027." in r
+    d = tax.december(log, datetime(2026, 12, 7, tzinfo=timezone.utc), {}, RATES)
+    assert "by 31 January 2027" in d

@@ -13,6 +13,7 @@ from invest_bot import fmt, hours, prices, rules, scan, state
 
 RATE = 0.15  # SZJA; exchange trades carry no szocho
 CARRY_YEARS = 2
+CERTIFICATE = "📄 K&H sends the tax certificate (adóigazolás) for {year} by 31 January {next}."
 DECLARE = "📝 Declare this loss in your tax return (line 172 'a') to use it in the next 2 years."
 US_DIVIDENDS = "dividends: 15% SZJA + 13% szocho (capped), US withholds 30%"
 GAP = 25  # a switch needs the pick to score at least this much more than the holding
@@ -174,6 +175,7 @@ def report(log, now, last, rates) -> str:
         lines.append(f"💵 US stocks ({', '.join(fmt.tick(s) for s in us)}): {US_DIVIDENDS}.")
     fx = ("Realised P/L at MNB rates, except trades recorded without one (Yahoo FX, approximate)" if approx(log)
           else "Realised P/L at the official MNB rates of the buy and sell days")
+    lines.append(CERTIFICATE.format(year=now.year, next=now.year + 1))
     return "\n".join(lines) + f"\n\nℹ️ {fx}; unrealised at Yahoo FX. A rough guide: check with your tax advisor."
 
 
@@ -193,6 +195,7 @@ def december(log, now, last, rates):
     else:
         lines.append("🟢 No holding is at a loss.")
     lines.append("⏰ A sale counts for this year only if it settles in the calendar year: act by about Dec 20.")
+    lines.append(CERTIFICATE.format(year=now.year, next=now.year + 1))
     lines.append("Hungary has no wash-sale rule: buying the same thing straight back is allowed (check with your tax "
                  "advisor).")
     return "\n".join(lines)

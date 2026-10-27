@@ -43,7 +43,8 @@ against the last 3 months ("cheaper than 85% of the last 3 months (good time to 
 waiting", only when the rate is in the cheapest or priciest 20%). From Dec 1 to Dec 20 it adds a tax check: this year's
 realised gains and the 15% tax due (losses carried from the 2 years before, if declared), the holdings at a loss and how much tax selling them would save (losses offset
 gains of the same year), a reminder that a sale must settle in the calendar year (act by about Dec 20) and that
-Hungary has no wash-sale rule (buying straight back is allowed; check with your tax advisor).
+Hungary has no wash-sale rule (buying straight back is allowed; check with your tax advisor). /tax and the December
+check also say that K&H sends the year's tax certificate (adóigazolás) by 31 January.
 
 A BUY turns into WAIT when earnings are 3 trading days away or less (4-7 days only adds a flag), or when a Yahoo
 headline of the last 3 days on it is negative (downgrade, guidance cut, lawsuit, probe, SEC, recall, misses, fraud,

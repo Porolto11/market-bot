@@ -7,7 +7,7 @@
 - **Netting.** Gains and losses net across ETÜ products. Commissions and account fees are deductible.
 - **Loss carry.** Losses from the 2 preceding years offset this year's gains, but only if they were **declared** (line 172, column "a"). The bot should remind the user to declare loss years.
 - **FX.** Use the official MNB rate on the buy day and on the sell day.
-- **Deadlines.** The broker statement is due by 15 Feb; the tax return by 20 May (form SZJA, sheet 04, line 172).
+- **Deadlines.** K&H sends the tax certificate (adóigazolás) by 31 January (docs/KH.md); the tax return by 20 May (form SZJA, sheet 04, line 172).
 - **Dividends.**
   - EEA-listed: 15%, with no szocho.
   - Non-EEA (e.g. US stocks): 15% plus 13% szocho (capped at 24× the minimum wage), and the US withholds 30% (the treaty was terminated in 2024).
