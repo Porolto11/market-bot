@@ -1,3 +1,4 @@
+import json
 import time
 from datetime import date, datetime, timedelta, timezone
 from io import StringIO
@@ -71,6 +72,10 @@ def test_movers_and_alert_lines():
     assert lines[0] == "📉 AMD −8.2% today" and lines[1] == "   📰 AMD slides (Reuters)" and len(lines) == 4
     assert lines[3] == "📈 UP +7.0% today"
     assert news.alert_lines([("X", -0.06, date(2026, 10, 23))], {}, TUE) == ["📉 X −6.0% on Fri 23 Oct"]
+    idx = pd.bdate_range(end="2026-10-27", periods=62)
+    wild = pd.DataFrame({"Close": [100 * (1.04 if i % 2 else 1 / 1.04) ** (i % 2) for i in range(61)] + [92.0]},
+                        index=idx)  # swings 4% a day: -8% is under 2.5 sigma
+    assert news.movers({"W": wild}, ["W"]) == []
     assert news.alert_lines([("ASML.AS", -0.06, date(2026, 10, 23))], {}, TUE) == ["📉 ASML −6.0% on Fri 23 Oct"]
 
 
@@ -120,23 +125,24 @@ def test_holding_with_negative_news_gets_a_flag(tmp_path):
     assert "lawsuit" not in log
 
 
-def test_big_move_alert_on_top_deduped_and_forces_a_send(tmp_path):
+def test_big_move_alert_on_a_holding_deduped_and_forces_a_send(tmp_path):
     base = market()
     drop = base["NVDA"].copy()
     drop.iloc[-1, 0] = drop.iloc[-2, 0] * 0.92
     h = dict(base, NVDA=drop)
-    sent = []
-    run(tmp_path, h=h, sent=sent, news_fn=lambda s: [old("Chip stocks slide (wire)", publisher="AP")])
-    assert "\n\n🚨 ALERTS\n📉 NVDA −8.0% on Mon 26 Oct\n   📰 Chip stocks slide (wire) (AP)\n\n🟢 BUY" in sent[0]
+    sent, env = [], dict(SECRETS, PORTFOLIO_JSON=json.dumps(dict(holdings=[
+        dict(ticker="NVDA", symbol="NVDA", qty=1, avg_cost_huf=1, ccy="USD")])))
+    run(tmp_path, h=h, sent=sent, env=env, news_fn=lambda s: [old("Chip stocks slide (wire)", publisher="AP")])
+    assert "\n\n🚨 ALERTS\n📉 NVDA −8.0% on Mon 26 Oct\n   📰 Chip stocks slide (wire) (AP)\n" in sent[0]
     assert sent[0].startswith("📊 Market scan")
     assert saved(tmp_path)["alerts"] == ["NVDA|2026-10-26"]
-    run(tmp_path, h=h, sent=sent)
+    run(tmp_path, h=h, sent=sent, env=env)
     assert len(sent) == 1  # same calls, alert already sent: nothing new
     st = saved(tmp_path)
     st["alerts"] = []
     from invest_bot import state
     state.save(st, str(tmp_path / "state" / "state.enc"), TOKEN)
-    run(tmp_path, h=h, sent=sent)
+    run(tmp_path, h=h, sent=sent, env=env)
     assert len(sent) == 2 and "🚨 ALERTS\n📉 NVDA −8.0%" in sent[1]  # calls unchanged, but a new alert
 
 

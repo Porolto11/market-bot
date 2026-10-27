@@ -30,7 +30,7 @@ This combines the 2026-10-27 audit with the "top-notch bot" plan. Each item is o
 
 ## P1: reliability and evidence
 6. Stooq backup prices (no key). Use the Alpha Vantage earnings calendar, 1 call/day, if `ALPHAVANTAGE_KEY` is set.
-7. Volatility-scaled move alerts on holdings only, to cut the noise.
+7. Volatility-scaled move alerts on holdings only, to cut the noise. Done: a holding's move must also be ≥ 2.5 daily σ (news.movers).
 8. **Backtest in the repo.** Walk-forward, after fees and tax, against CSPX. Fix the "backtested" docstring.
 9. **Shadow momentum.** Plain 12-1 momentum plus a trend filter runs next to the current score (`SCORE_MODE`). Switch after 3–6 months if it keeps winning. Started 2026-10-27: each scan logs the top 5 of both models (track.shadow), /stats shows the race; the `SCORE_MODE` switch comes only when the evidence is in.
 10. **Paper portfolio as /stats.**

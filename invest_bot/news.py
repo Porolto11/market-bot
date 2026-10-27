@@ -15,6 +15,7 @@ MAX_TITLE = 120
 TIMEOUT = 20  # seconds for the whole news fetch
 WORKERS = 8
 UP, DOWN = 0.07, -0.05  # big daily move
+SIGMAS, VOL_DAYS = 2.5, 60  # ...and at least 2.5 daily standard deviations of the last 60 sessions
 # "SEC filing(s)" is routine (insider sales, 13F): not negative by itself
 NEGATIVE = re.compile(r"\b(?:downgrade[sd]?|cuts guidance|lowers guidance|guidance cut|lawsuits?|investigations?|"
                       r"probes?|sec(?! filings?)|recalls?|misses|fraud|delist(?:s|ed|ing)?|bankruptcy|resigns|"
@@ -124,12 +125,23 @@ def last_move(hist):
         return None, None
 
 
+def _sd(hist):
+    """Daily return standard deviation of the VOL_DAYS sessions before the last one (0 when too short)."""
+    try:
+        r = hist["Close"].dropna().pct_change().iloc[-VOL_DAYS - 1:-1].dropna()
+        return float(r.std()) if len(r) >= 20 else 0.0
+    except Exception:
+        return 0.0
+
+
 def movers(histories, symbols) -> list:
-    """[(symbol, change, date)] with a last daily move of >= +7% or <= -5%."""
+    """[(symbol, change, date)] with a last daily move of >= +7% or <= -5% that is also >= SIGMAS daily standard
+    deviations: a volatile stock's usual swing is not news."""
     out = []
     for s in dict.fromkeys(symbols):
         ch, d = last_move(histories.get(s))
-        if ch is not None and (ch >= UP or ch <= DOWN):
+        k = SIGMAS * _sd(histories.get(s)) if ch is not None else 0
+        if ch is not None and (ch >= max(UP, k) or ch <= min(DOWN, -k)):
             out.append((s, ch, d))
     return out
 

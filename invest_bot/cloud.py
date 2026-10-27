@@ -503,7 +503,7 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
     items = scan.run_scan(scanned, funds, now, cash, holdings, rates, stale=stale)
     regime = analysis.market_regime(hists)
     seen = st.get("alerts") or []
-    fresh = [m for m in news.movers(scanned, [*holdings, *(i["symbol"] for i in items[:10])])
+    fresh = [m for m in news.movers(scanned, holdings)
              if f"{m[0]}|{m[2]}" not in seen]
     started = time.monotonic()
     headlines = news.fetch([*(i["symbol"] for i in items if i["call"] in ("BUY", "WAIT_FOR_DIP")), *holdings,
