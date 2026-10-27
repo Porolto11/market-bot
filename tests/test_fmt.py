@@ -57,6 +57,7 @@ def test_scan_message_layout():
                            "🚨 ALERTS\n📉 AMD −8.2% today\n   📰 AMD guidance cut (Reuters)\n\n🟢 BUY PLAN\n")
     assert ("🟢 BUY PLAN\n1️⃣ Buy 2× Arista Networks (ANET) at ≤ $179.4 ≈ 119 000 HUF + fee 800 HUF (0.67%)\n"
             "   80/100 ✅ · 📈 +424% in 12 months · 🎯 analysts +71% upside · ⏰ valid till Wed\n"
+            "   🛑 exit plan: sell if it closes below $157.87 (−12%) — the bot alerts you\n"
             "🧮 Total ≈ 120 000 HUF of your 250 000 HUF · left ≈ 130 000 HUF\n"
             "👀 Watchlist: Micron (MU) 99\n\n") in text
     assert "⏳ WAIT (would be BUY)\n• Eli Lilly (LLY) · 88/100 — Earnings in 2 days — wait for the report.\n\n" in text

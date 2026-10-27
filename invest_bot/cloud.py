@@ -192,6 +192,8 @@ def plan_lines(i, now, n) -> list:
                                f"⏰ valid till {fmt.day(i['valid_until'], now.date())}"])]
     if pay := paid_line(i):
         out.insert(1, f"   {pay}")
+    out.append(f"   🛑 exit plan: sell if it closes below {fmt.price(round(i['limit'] * (1 - watch.HARD_STOP), 2), i['ccy'])} "
+               f"(−{watch.HARD_STOP:.0%}) — the bot alerts you")
     out += [f"   {fmt.flag(f)}" for f in i.get("flags") or []]
     if i.get("dist"):
         out.append(f"   {DIST}")

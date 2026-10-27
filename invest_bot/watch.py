@@ -1,5 +1,6 @@
 """Alerts from the scan's own price histories: on the holdings a trailing stop (15% below the peak close since the
-first buy) and a hard stop (15% below the average cost in HUF); on the core ETFs a dip of 8% or more below the
+first buy) and a hard stop (HARD_STOP = 12% below the average cost in HUF,
+Han-Zhou-Zhu in docs/RESEARCH.md); on the core ETFs a dip of 8% or more below the
 52-week high. Each is a (dedupe key, line) pair; stop keys go into the state's `alerts` list once the message is
 sent, the dip depths into its `dips` dict ({symbol: {d, dd}} of the last dip alert).
 fx_lines: the Monday summary's EUR/HUF and USD/HUF line against the last 3 months.
@@ -10,7 +11,8 @@ import numpy as np
 
 from invest_bot import analysis, fmt, prices, rules, scan
 
-STOP = 0.15
+STOP = 0.15  # trailing, from the peak
+HARD_STOP = 0.12  # vs cost: the stop each BUY shows at entry
 CORE = ("CSPX.L", "CNDX.AS", "VVSM.DE", "VWCE.DE")
 DIP, BIG_DIP = -0.08, -0.15  # drawdown from the 52-week high
 DIP_EVERY = 20  # trading days before the same dip is alerted again
@@ -57,12 +59,12 @@ def stops(portfolio, log, hists, items, rates, now, seen) -> list:
             pct = f"{fmt.tick(s)} is {(1 - last / peak) * 100:.1f}% below its peak since you bought"
             if i and i["score"] >= scan.BUY_SCORE and i["rating"] == "bullish":  # the scan would call it a BUY
                 lines.append(f"⚠️ {pct}, but the trend/score is still strong ({i['score']}) — hold unless it falls "
-                             "further (hard stop at −15% vs your cost).")
+                             f"further (hard stop at −{HARD_STOP:.0%} vs your cost).")
             else:
                 lines.append(f"🛑 {pct} (peak {fmt.price(round(peak, 2), ccy)}, now {fmt.price(round(last, 2), ccy)}) "
                              "— consider selling.")
         rate, avg = scan.huf_rate(ccy, rates), h.get("avg_cost_huf")
-        if rate and avg and last * rate <= avg * (1 - STOP):
+        if rate and avg and last * rate <= avg * (1 - HARD_STOP):
             lines.append(f"🛑 {fmt.tick(s)} is {(1 - last * rate / avg) * 100:.1f}% below your average cost (avg "
                          f"{rules._huf(avg)} HUF, now {rules._huf(last * rate)} HUF a share) — hard stop, "
                          "consider selling.")

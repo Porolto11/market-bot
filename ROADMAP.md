@@ -39,6 +39,8 @@ This combines the 2026-10-27 audit with the "top-notch bot" plan. Each item is o
 11. **Exits defined at entry.**
     - Each BUY gets an ID, a stop, a trend exit and a review date.
     - Lifecycle: ACTIVE → STOP_HIT / TREND_EXIT / CLOSED, with follow-up messages.
+    - Done (lean): every BUY PLAN pick shows its exit (−12% hard stop vs cost, watch.HARD_STOP); the stop alerts
+      and the trend SELL are the follow-ups. IDs and a review date only if the paper portfolio needs them.
 12. **Volatility-based position sizing,** with at most 5–6 positions.
 13. Trim the commands cron at weekends to save Actions minutes.
 
