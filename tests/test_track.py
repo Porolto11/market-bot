@@ -72,3 +72,29 @@ def test_scan_logs_sent_calls_and_keeps_them_encrypted(tmp_path):
     go(tmp_path, force=True)  # same day, same calls: no duplicates
     assert len(saved(tmp_path)["calls"]) == len(st["calls"])
     assert not (tmp_path / "state" / "state.enc").read_bytes().startswith(b"{")
+
+
+def test_shadow_logs_top_picks_once_per_episode_and_scores():
+    h = {"UP": series(1.01), "DOWN": series(0.99), "OLD": series(1.0), "CSPX.L": series(1.0, base=500)}
+    items = [dict(symbol="UP", score=90, mom=10), dict(symbol="DOWN", score=50, mom=95),
+             dict(symbol="OLD", score=99, mom=99, stale=True), dict(symbol="NONE", score=0, mom=0)]
+    st = {}
+    track.shadow(st, items, D0, h)
+    assert sorted((c["m"], c["sym"]) for c in st["shadow"]) == [
+        ("mom", "DOWN"), ("mom", "UP"), ("score", "DOWN"), ("score", "UP")]  # stale and zero left out
+    track.shadow(st, items, np.busday_offset(D0, 5).astype(date), h)
+    assert len(st["shadow"]) == 4  # same episode
+    track.shadow(st, items, np.busday_offset(D0, 20).astype(date), h)
+    assert len(st["shadow"]) == 8
+    st["shadow"] = st["shadow"][:4]
+    track.score(st, np.busday_offset(D0, 25).astype(date), h)
+    assert all("20" in c["x"] for c in st["shadow"])
+    assert "🧪 Model test" in track.stats(st)
+
+
+def test_mom_only_trend_filter():
+    from invest_bot import scan
+    moms = dict(long=[0.1, 0.2, 0.3])
+    assert scan.mom_only(dict(last=10, sma200=9, mom_12_1=0.3), moms) > 50
+    assert scan.mom_only(dict(last=8, sma200=9, mom_12_1=0.3), moms) == 0  # below the 200-day average
+    assert scan.mom_only(dict(last=10), moms) == 0  # no momentum

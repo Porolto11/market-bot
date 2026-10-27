@@ -199,6 +199,12 @@ def potential(ind, fund, universe_moms, today: date | None = None):
     return score, dict(parts, upside_pct=upside_pct), flags
 
 
+def mom_only(ind, moms) -> int:
+    """The shadow model (ROADMAP 9): 0..100 percentile of plain 12-1 momentum, 0 below the 200-day average."""
+    p, sma = _pct(_long_mom(ind), (moms or {}).get("long", [])), ind.get("sma200")
+    return 0 if p is None or (sma and ind["last"] < sma) else int(round(100 * p))
+
+
 def default_ccy(symbol) -> str:
     bt = BOT_TICKER.get(symbol)
     if bt:
@@ -363,7 +369,7 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
         out.append(dict(symbol=s, name=name, kind=kind, ccy=ccy, last=last, score=score, parts=parts, rating=rating,
                         call=call, limit=limit, qty=qty, approx_huf=approx, one_share_huf=one, valid_until=until,
                         reason=f"{why} {act}".strip(), why=why, flags=flags, mom_long=_long_mom(ind),
-                        mom_6m=ind.get("mom_6m"), stale=s in stale,
+                        mom_6m=ind.get("mom_6m"), stale=s in stale, mom=mom_only(ind, moms),
                         sector="ETF" if kind == "etf" else fund.get("sector"), dist=rest[-1] == "dist"))
     out.sort(key=lambda i: (-i["score"], i["symbol"]))
     return out

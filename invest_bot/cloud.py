@@ -521,6 +521,7 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
                    stops=stops, wallet=wallet)
     current = calls(items, switches)
     track.score(st, now.date(), hists)
+    track.shadow(st, items, now.date(), hists)
     summary = weekly = None
     if is_weekly(now):
         summary, weekly = weekly_summary(st, items, regime, holdings, known, rates, hists, now)

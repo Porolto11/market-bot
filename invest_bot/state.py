@@ -1,7 +1,7 @@
 """The bot's state as one encrypted JSON file (state/state.enc on the `state` branch).
 
 Keys: offset (Telegram getUpdates), log (trades and cash entries, oldest first), sent (calls of the last sent
-scan messages), calls (the call log scored by track.py), scan (the latest scan's ranking and momentum lists),
+scan messages), calls (the call log scored by track.py), shadow (the model test, track.shadow), scan (the latest scan's ranking and momentum lists),
 outbox (replies not yet delivered), weekly (time and portfolio value of the last weekly summary), alerts
 (keys of the alerts already sent: symbol|date for big moves,
 stop|symbol|ISO week for stops), dips ({symbol: {d, dd}}: date and
