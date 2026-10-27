@@ -148,7 +148,7 @@ def trade(st, side, sym, q, px, now, download_fn, info_fn, mnb_fn=mnb.fetch) -> 
     fx = scan.huf_rate(ccy, rates)
     if fx is None:
         return f"No {ccy}/HUF rate from Yahoo right now: nothing recorded, try again later."
-    fee = scan._fee(q * px, ccy, rates)
+    fee = scan._fee(q * px, ccy, rates, s)
     e = dict(t=side, sym=s, qty=q, price=px, ccy=ccy, fx=fx, fee=round(fee, 4), at=now.isoformat(timespec="seconds"))
     note = ""
     if ccy != "HUF":  # the tax figures use the official MNB rate of the trade day

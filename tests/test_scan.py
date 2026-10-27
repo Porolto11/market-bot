@@ -193,10 +193,10 @@ def test_leftover_goes_one_share_at_a_time_to_the_highest_ranked_pick():
 
 
 def test_buy_with_a_fee_over_1_percent_is_skipped():
-    usd, huf = buy_item("US", 100.0, score=95), buy_item("HU", 3000.0, "HUF", score=90)
+    usd, huf = buy_item("US", 100.0, score=95), buy_item("HU.BD", 3000.0, "HUF", score=90)
     assert scan.min_qty(usd, FX) == 4 and scan.min_qty(huf, FX) == 12  # 3.49 USD / 1% = 349 USD; 349 HUF / 1%
     picks = scan.plan([usd, huf], 120_000, FX)  # 4 USD shares ≈ 141 000 HUF do not fit: US is skipped
-    assert [i["symbol"] for i in picks] == ["HU"] and huf["fee_pct"] <= scan.FEE_MAX and not usd.get("plan")
+    assert [i["symbol"] for i in picks] == ["HU.BD"] and huf["fee_pct"] <= scan.FEE_MAX and not usd.get("plan")
     assert huf["qty"] == 39  # 39 x 3000 + 349 fee <= 118 800
 
 

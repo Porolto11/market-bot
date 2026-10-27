@@ -24,7 +24,9 @@ On weekdays at 06:50 and 21:15 UTC (after the US close) it scans about 80 stocks
 WAIT_FOR_DIP / SELL calls to Telegram. Only completed daily closes count: today's unfinished bar is dropped, and a
 symbol without a close for its exchange's last completed session gets no BUY or SELL call ("stale data"). It never trades: you place the orders yourself in the K&H app. Each BUY line says how many whole
 shares fit your budget. The BUY section is a BUY PLAN: the top 3 picks your cash (or the budget) can actually buy,
-e.g. "Buy 3× Micron (MU) at ≤ $905.5 ≈ 897 000 HUF + fee 2 150 HUF (0.24%)", and a total line. A pick needs its
+e.g. "Buy 3× Micron (MU) at ≤ $905.5 ≈ 897 000 HUF + fee 2 150 HUF (0.24%)", and a total line. The K&H fee is 0.24% with a
+minimum per market (by the exchange suffix: US 3.49 USD, BÉT 349 HUF, Xetra/Euronext/LSE/Dublin 3.49 EUR, Nordic,
+Swiss, Vienna, Madrid and Milan 11.99 EUR, converted to the trade currency, e.g. DKK for Novo Nordisk). A pick needs its
 smallest ticket with a K&H fee of at most 1% to fit into a third of the cash (when fewer fit, one may use the rest);
 the cash is split equally in whole shares and the leftover goes to the highest-ranked pick. Value + fee + K&H's 1% FX
 conversion spread always stay within the cash less a 1% buffer. The other BUY calls are a watchlist (names and scores). The picks are spread out:

@@ -49,7 +49,7 @@ Evidence from docs/RESEARCH.md that shapes P1:
 
 **K&H facts (docs/KH.md) to apply next:**
 - **FX:** the spread is 1%, not 0.3%. Done (rules.FX_SPREAD).
-- **Minimum fees:** 11.99 EUR for Nordic, Swiss, Spanish and Italian listings (e.g. Novo Nordisk on .CO).
+- **Minimum fees:** 11.99 EUR for Nordic, Swiss, Spanish and Italian listings (e.g. Novo Nordisk on .CO). Done (fees.MARKET_MIN, by exchange suffix).
 - **Buy taxes:** France 0.4% (LVMH, Airbus, Schneider), Spain/Italy 0.2%, UK 0.5%, Irish shares 1%.
 - **Package:** the fee rate is set per package (Platinum 0.24% … Start 0.34%).
 - **Tax certificate date:** 31 January.

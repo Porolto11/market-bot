@@ -95,7 +95,7 @@ def switches(items, portfolio, cash, rates, ytd_pl) -> list:
             continue
         if i["score"] >= STRONG and i["call"] != "SELL":
             continue
-        fee = scan._fee(q * i["last"], i["ccy"], rates) * rate
+        fee = scan._fee(q * i["last"], i["ccy"], rates, i["symbol"]) * rate
         proceeds = q * i["last"] * rate - fee
         cands.append(dict(i=i, q=q, fee=fee, proceeds=proceeds, gain=proceeds - h["avg_cost_huf"] * q))
     cands.sort(key=lambda c: (c["gain"] >= 0, c["i"]["score"]))
@@ -107,10 +107,11 @@ def switches(items, portfolio, cash, rates, ytd_pl) -> list:
             gap = pick["score"] - c["i"]["score"]
             if gap < GAP:
                 continue
-            m, cost, _ = scan.size(cash + c["proceeds"], pick["limit"], pick["ccy"], rates)
+            m, cost, _ = scan.size(cash + c["proceeds"], pick["limit"], pick["ccy"], rates, pick["symbol"])
             if not m:
                 continue
-            fees = c["fee"] + scan._fee(m * pick["limit"], pick["ccy"], rates) * scan.huf_rate(pick["ccy"], rates)
+            fees = c["fee"] + (scan._fee(m * pick["limit"], pick["ccy"], rates, pick["symbol"])
+                               * scan.huf_rate(pick["ccy"], rates))
             tax = max(0.0, tax_on(c["gain"], ytd_pl))  # a loss: no tax now (its saving shows in the note)
             if gap * EDGE_PER_POINT * min(c["proceeds"], cost) <= tax + fees:
                 continue

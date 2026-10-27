@@ -220,31 +220,32 @@ def huf_rate(ccy, fx_rates) -> float | None:
     return (fx_rates or {}).get(ccy) or None
 
 
-def _fee(value, ccy, fx_rates):
-    """K&H commission in the instrument currency; currencies without a tariff use the EUR minimum, converted."""
-    if ccy in fees.MIN:
-        return fees.commission(value, ccy)
-    eur, own = huf_rate("EUR", fx_rates), huf_rate(ccy, fx_rates)
-    floor = fees.MIN["EUR"] * eur / own if eur and own else 0.0
+def _fee(value, ccy, fx_rates, symbol=None):
+    """K&H commission in the instrument currency: 0.24%, at least the minimum of the symbol's market (fees.minimum,
+    e.g. 11.99 EUR on Copenhagen), converted to the instrument currency at Yahoo FX when it differs (0 when unknown)."""
+    amount, mccy = fees.minimum(symbol, ccy)
+    if mccy == ccy:
+        floor = amount
+    else:
+        m, own = huf_rate(mccy, fx_rates), huf_rate(ccy, fx_rates)
+        floor = amount * m / own if m and own else 0.0
     return max(value * fees.RATE, floor)
 
 
-def size(budget_huf, limit, ccy, fx_rates):
-    """(qty, approx_huf, one_share_huf): whole shares for the budget incl. fee and FX spread (rules.buy_qty)."""
+def size(budget_huf, limit, ccy, fx_rates, symbol=None):
+    """(qty, approx_huf, one_share_huf): whole shares for the budget incl. fee and FX spread."""
     rate = huf_rate(ccy, fx_rates)
     if rate is None or not limit:
         return None, None, None
-    one = (limit + _fee(limit, ccy, fx_rates)) * rate * (1 + (rules.FX_SPREAD if ccy != "HUF" else 0))
+    spread = 1 + (rules.FX_SPREAD if ccy != "HUF" else 0)
+    one = (limit + _fee(limit, ccy, fx_rates, symbol)) * rate * spread
     if budget_huf is None:
         return None, None, one
-    if ccy in fees.MIN:
-        qty = rules.buy_qty(budget_huf, budget_huf, limit, rate, ccy)
-    else:
-        cap = budget_huf / (1 + rules.FX_SPREAD)
-        qty = max(0, math.floor(cap / (limit * rate)))
-        while qty > 0 and (qty * limit + _fee(qty * limit, ccy, fx_rates)) * rate > cap:
-            qty -= 1
-    approx = (qty * limit + _fee(qty * limit, ccy, fx_rates)) * rate if qty else None
+    cap = budget_huf / spread
+    qty = max(0, math.floor(cap / (limit * rate)))
+    while qty > 0 and (qty * limit + _fee(qty * limit, ccy, fx_rates, symbol)) * rate > cap:
+        qty -= 1
+    approx = (qty * limit + _fee(qty * limit, ccy, fx_rates, symbol)) * rate if qty else None
     return qty, approx, one
 
 
@@ -329,7 +330,7 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
             else:
                 _, limit, _ = rules.dip_rule(ind, rating, last, ccy)
                 until = _until(s, today, rules.DIP_DAYS)
-            qty, approx, one = size(budget, limit, ccy, fx_rates)
+            qty, approx, one = size(budget, limit, ccy, fx_rates, s)
             if one is None:
                 tail = "Exchange rate unavailable, so no share count."
             elif qty is None:
@@ -368,12 +369,12 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
 def cost(i, qty, fx_rates) -> tuple:
     """(value, fee) in HUF of qty shares at the item's limit, both with the bank's 1% FX spread (rules.FX_SPREAD)."""
     rate = huf_rate(i["ccy"], fx_rates) * (1 + (rules.FX_SPREAD if i["ccy"] != "HUF" else 0))
-    return qty * i["limit"] * rate, _fee(qty * i["limit"], i["ccy"], fx_rates) * rate
+    return qty * i["limit"] * rate, _fee(qty * i["limit"], i["ccy"], fx_rates, i["symbol"]) * rate
 
 
 def min_qty(i, fx_rates) -> int:
     """The fewest whole shares (at least 1) whose K&H fee is at most FEE_MAX of their value."""
-    return max(1, math.ceil(_fee(0.0, i["ccy"], fx_rates) / FEE_MAX / i["limit"] - 1e-9))
+    return max(1, math.ceil(_fee(0.0, i["ccy"], fx_rates, i["symbol"]) / FEE_MAX / i["limit"] - 1e-9))
 
 
 def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE) -> list:
@@ -395,7 +396,7 @@ def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE) -> list:
             picks.append(i)
             left -= need[id(i)]
     picks.sort(key=cands.index)
-    qty = {id(i): max(min_qty(i, fx_rates), size(budget / len(picks), i["limit"], i["ccy"], fx_rates)[0] or 0)
+    qty = {id(i): max(min_qty(i, fx_rates), size(budget / len(picks), i["limit"], i["ccy"], fx_rates, i["symbol"])[0] or 0)
            for i in picks}
 
     def total():
@@ -418,7 +419,7 @@ def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE) -> list:
         i.update(plan=True, qty=qty[id(i)], value_huf=value, fee_huf=fee, fee_pct=fee / value, approx_huf=value + fee)
     for i in items:
         if i["call"] == "WAIT_FOR_DIP" and i.get("limit"):
-            i["qty"], i["approx_huf"], _ = size(budget - spent, i["limit"], i["ccy"], fx_rates)
+            i["qty"], i["approx_huf"], _ = size(budget - spent, i["limit"], i["ccy"], fx_rates, i["symbol"])
     return picks
 
 
