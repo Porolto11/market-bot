@@ -2,7 +2,8 @@
 
 Deterministic, no LLM. Pure functions of injected price histories, fundamentals, cash, holdings and FX rates,
 so the same code runs in the daily review (review.run_review) and in the cloud runner (invest_bot.cloud).
-Only the momentum part of the score is backtested; growth and analyst targets are today's yfinance figures.
+Only the price part of the score is backtested (tools/backtest.py); growth and analyst targets are today's yfinance
+figures.
 """
 import json
 import math

@@ -1,6 +1,6 @@
 """Alerts from the scan's own price histories: on the holdings a trailing stop (15% below the peak close since the
-first buy) and a hard stop (HARD_STOP = 12% below the average cost in HUF,
-Han-Zhou-Zhu in docs/RESEARCH.md); on the core ETFs a dip of 8% or more below the
+first buy) and a hard stop (HARD_STOP = 20% below the average cost in HUF,
+a crash guard: tools/backtest.py found 12-15% stops cost return, 20-25% about neutral); on the core ETFs a dip of 8% or more below the
 52-week high. Each is a (dedupe key, line) pair; stop keys go into the state's `alerts` list once the message is
 sent, the dip depths into its `dips` dict ({symbol: {d, dd}} of the last dip alert).
 fx_lines: the Monday summary's EUR/HUF and USD/HUF line against the last 3 months.
@@ -12,7 +12,7 @@ import numpy as np
 from invest_bot import analysis, fmt, prices, rules, scan
 
 STOP = 0.15  # trailing, from the peak
-HARD_STOP = 0.12  # vs cost: the stop each BUY shows at entry
+HARD_STOP = 0.20  # vs cost: the stop each BUY shows at entry
 CORE = ("CSPX.L", "CNDX.AS", "VVSM.DE", "VWCE.DE")
 DIP, BIG_DIP = -0.08, -0.15  # drawdown from the 52-week high
 DIP_EVERY = 20  # trading days before the same dip is alerted again

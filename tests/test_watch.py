@@ -39,11 +39,11 @@ def test_trailing_stop_uses_the_peak_since_the_first_buy():
 
 
 def test_hard_stop_vs_average_cost_without_a_trade_log():
-    h = {"AMD": closes([100, 100, 100, 100, 85])}  # 85 x 350 = 29 750 HUF vs avg 35 000: -15%
+    h = {"AMD": closes([100, 100, 100, 100, 80])}  # 80 x 350 = 28 000 HUF vs avg 35 000: -20%
     out = watch.stops(pf(35000), [], h, [dict(symbol="AMD", ccy="USD")], RATES, NOW, [])
-    assert out[0][1] == ("🛑 AMD is 15.0% below your average cost (avg 35 000 HUF, now 29 750 HUF a share) — hard stop, "
+    assert out[0][1] == ("🛑 AMD is 20.0% below your average cost (avg 35 000 HUF, now 28 000 HUF a share) — hard stop, "
                          "consider selling.")
-    assert watch.stops(pf(33500), [], h, [], RATES, NOW, []) == []  # -11.2%
+    assert watch.stops(pf(34000), [], h, [], RATES, NOW, []) == []  # -17.6%
 
 
 def test_stop_alert_is_sent_once_a_week(tmp_path):
@@ -149,8 +149,8 @@ def test_trailing_stop_on_a_strong_holding_says_hold():
     strong = [dict(symbol="AMD", ccy="USD", score=89, rating="bullish")]
     line = watch.stops(pf(), log, h, strong, RATES, NOW, [])[0][1]
     assert line == ("⚠️ AMD is 15.0% below its peak since you bought, but the trend/score is still strong (89) — hold "
-                    "unless it falls further (hard stop at −12% vs your cost).")
+                    "unless it falls further (hard stop at −20% vs your cost).")
     for i in (dict(strong[0], score=69), dict(strong[0], rating="neutral")):
         assert watch.stops(pf(), log, h, [i], RATES, NOW, [])[0][1].endswith("— consider selling.")
-    hard = watch.stops(pf(80000), log, h, strong, RATES, NOW, [])[0][1]  # the hard stop stays as it is
+    hard = watch.stops(pf(85000), log, h, strong, RATES, NOW, [])[0][1]  # the hard stop stays as it is
     assert "hold unless" in hard and hard.endswith("hard stop, consider selling.")

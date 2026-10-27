@@ -29,9 +29,12 @@ This combines the 2026-10-27 audit with the "top-notch bot" plan. Each item is o
      - Only UCITS ETFs are allowed, because US-domiciled ETFs lack an EU KID and K&H can't sell them to retail.
 
 ## P1: reliability and evidence
-6. Stooq backup prices (no key). Use the Alpha Vantage earnings calendar, 1 call/day, if `ALPHAVANTAGE_KEY` is set.
+6. Stooq backup prices (no key). BLOCKED 2026-10-27: Stooq now serves a JavaScript bot check instead of CSV; not worked around. Use the Alpha Vantage earnings calendar, 1 call/day, if `ALPHAVANTAGE_KEY` is set.
 7. Volatility-scaled move alerts on holdings only, to cut the noise. Done: a holding's move must also be ≥ 2.5 daily σ (news.movers).
 8. **Backtest in the repo.** Walk-forward, after fees and tax, against CSPX. Fix the "backtested" docstring.
+   Done: `python tools/backtest.py` (monthly top 5, K&H fees, 15% tax, vs SPY, survivorship-biased). 2014-today, S&P100:
+   plain momentum +32.5%/yr after tax, the bot's price score +20.6%, SPY +12.6%. A 12-15% stop vs cost lowered CAGR
+   by 1-6 points without a smaller drawdown; 20-25% was about neutral, so the hard stop is 20% (a crash guard).
 9. **Shadow momentum.** Plain 12-1 momentum plus a trend filter runs next to the current score (`SCORE_MODE`). Switch after 3–6 months if it keeps winning. Started 2026-10-27: each scan logs the top 5 of both models (track.shadow), /stats shows the race; the `SCORE_MODE` switch comes only when the evidence is in.
 10. **Paper portfolio as /stats.**
     - Follow every call with virtual HUF, after fees and tax, against CSPX.
@@ -39,13 +42,13 @@ This combines the 2026-10-27 audit with the "top-notch bot" plan. Each item is o
 11. **Exits defined at entry.**
     - Each BUY gets an ID, a stop, a trend exit and a review date.
     - Lifecycle: ACTIVE → STOP_HIT / TREND_EXIT / CLOSED, with follow-up messages.
-    - Done (lean): every BUY PLAN pick shows its exit (−12% hard stop vs cost, watch.HARD_STOP); the stop alerts
+    - Done (lean): every BUY PLAN pick shows its exit (−20% hard stop vs cost, watch.HARD_STOP; 12% failed the backtest); the stop alerts
       and the trend SELL are the follow-ups. IDs and a review date only if the paper portfolio needs them.
 12. **Volatility-based position sizing,** with at most 5–6 positions.
 13. Trim the commands cron at weekends to save Actions minutes.
 
 Evidence from docs/RESEARCH.md that shapes P1:
-- Item 11's stop is about 12% (Han-Zhou-Zhu).
+- Item 11's stop is about 12% (Han-Zhou-Zhu, long-short). Our long-only backtest disagrees: 20% (item 8).
 - Item 9 drops analyst upside and growth from the score (analyst targets are about 15% too high).
 - Messages remind the user to declare loss years, since an undeclared loss can't be carried.
 
