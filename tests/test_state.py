@@ -45,7 +45,7 @@ def test_book_fifo_and_cash():
     # sale proceeds 4480; FIFO cost: the 10 @ 100 lot (1010) + half the 10 @ 200 lot (1005)
     assert b["realised"] == [pytest.approx(4480 - 2015)]
     assert state.qty(b["pos"]["A"]) == 5 and b["pos"]["A"]["lots"] == [[5, 200, pytest.approx(1005), pytest.approx(1005)]]
-    assert b["cash"] == pytest.approx(100_000 - 1010 - 2010 + 4480 + 1000 - 500)
+    assert b["cash"] == pytest.approx({"HUF": 100_000 - 1010 - 2010 + 4480 + 1000 - 500})
 
 
 def test_book_without_cash_entries_has_unknown_cash_and_sold_out_positions_go():
@@ -57,7 +57,7 @@ def test_portfolio_shape():
     assert state.portfolio(state.empty()) is None
     st = dict(state.empty(), log=[buy("MOL.BD", 4, 3000, fee=349), buy("MOL.BD", 6, 3500)])
     p = state.portfolio(st)
-    assert p["cash_huf"] is None and p["as_of"] == "2026-10-26"
+    assert p["cash_huf"] is None and p["cash"] is None and p["as_of"] == "2026-10-26"
     assert p["holdings"] == [dict(symbol="MOL.BD", qty=10, ccy="HUF", avg_cost_huf=pytest.approx(3334.9))]
 
 

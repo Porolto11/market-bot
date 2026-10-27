@@ -157,7 +157,8 @@ def test_plan_of_1_3m_with_10_candidates_has_at_most_3_picks_within_cash():
     picks = scan.plan(items, 1_300_000, FX)
     assert [i["symbol"] for i in picks] == ["S0", "S1", "S2"] and sum(i.get("plan", False) for i in items) == 3
     assert spent(picks) <= 1_300_000 * 0.99 and all(i["fee_pct"] <= scan.FEE_MAX for i in picks)
-    assert all(i["approx_huf"] == pytest.approx(i["value_huf"] + i["fee_huf"]) for i in picks)
+    assert all(i["approx_huf"] == pytest.approx(i["value_huf"] + i["fee_huf"] + i["fx_cost_huf"]) for i in picks)
+    assert all(i["fx_cost_huf"] == pytest.approx(i["convert_huf"] / 1.01 * 0.01) for i in picks)  # all converted
     # equal split, then the leftover went to the top pick: little cash is left over
     assert 1_300_000 * 0.99 - spent(picks) < min(sum(scan.cost(i, 1, FX)) for i in picks)
     hs = universe({f"S{k}": hist(up=1.015 + k / 1000) for k in range(10)})  # through run_scan too

@@ -48,6 +48,25 @@ def huf(x) -> str:
     return f"{approx(x)} HUF"
 
 
+def amount(x, ccy) -> str:
+    """A cash amount: whole forints for HUF (120 000 HUF), else cents with the sign ($1 234.50, €300.00, 12.00 DKK)."""
+    if ccy == "HUF":
+        return f"{rules._huf(x)} HUF"
+    v = f"{x:,.2f}".replace(",", " ")
+    return f"{SIGN[ccy]}{v}" if ccy in SIGN else f"{v} {ccy}"
+
+
+CASH_ORDER = ("HUF", "USD", "EUR")
+
+
+def cash(wallet) -> str:
+    """'120 000 HUF · $500.00 · €300.00': HUF first, then USD, EUR and any other currency; a zero foreign balance
+    is left out."""
+    keys = [c for c in CASH_ORDER if c in wallet] + sorted(c for c in wallet if c not in CASH_ORDER)
+    shown = [amount(wallet[c], c) for c in keys if c == "HUF" or abs(wallet[c]) >= 0.005]
+    return " · ".join(shown) or "0 HUF"
+
+
 def signed(x, digits=1, unit="%") -> str:
     """+11.8% / −14.0% (a real minus sign; a value that rounds to 0 is +0.0%)."""
     x = 0.0 if round(x, digits) == 0 else x

@@ -54,7 +54,8 @@ Evidence from docs/RESEARCH.md that shapes P1:
 - **Package:** the fee rate is set per package (Platinum 0.24% … Start 0.34%).
 - **Tax certificate date:** 31 January.
 - **Later:** import the WebTrader Excel export of transactions.
-- **Multi-currency cash.** Platinum accounts can hold USD, EUR and HUF.
+- **Multi-currency cash.** Platinum accounts can hold USD, EUR and HUF. Done (state.book per currency, scan.pay;
+  conversions only from HUF; still to check in WebTrader whether USD/EUR cash can really be held).
   - Track cash per currency: `/cash 250000 HUF`, `/cash 500 USD`, `/cash 300 EUR`.
   - Buys spend the instrument's own currency first. Only the shortfall is converted, at 1%.
   - Sells credit their own currency; there's no auto-convert.

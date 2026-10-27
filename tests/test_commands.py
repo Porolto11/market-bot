@@ -39,9 +39,11 @@ def test_parse_commands():
     assert commands.parse("/bought nvda 3 120,5") == ("bought", ("NVDA", 3, 120.5))
     assert commands.parse("/SOLD MOL.BD 2 3300.25") == ("sold", ("MOL.BD", 2, 3300.25))
     assert commands.parse("/Bought@InvestBot csPX 1 600") == ("bought", ("CSPX", 1, 600.0))
-    assert commands.parse("/deposit 150000,5") == ("deposit", (150000.5,))
-    assert commands.parse("/withdraw 1000") == ("withdraw", (1000.0,))
-    assert commands.parse("/cash 0") == ("cash", (0.0,))
+    assert commands.parse("/deposit 150000,5") == ("deposit", (150000.5, "HUF"))
+    assert commands.parse("/withdraw 1000") == ("withdraw", (1000.0, "HUF"))
+    assert commands.parse("/cash 0") == ("cash", (0.0, "HUF"))
+    assert commands.parse("/cash 500 usd") == ("cash", (500.0, "USD"))
+    assert commands.parse("/deposit 300,5 EUR") == ("deposit", (300.5, "EUR"))
     assert commands.parse("/scan otp.bd") == ("scan", ("OTP.BD",))
     for c in ("holdings", "top", "undo", "help"):
         assert commands.parse(f"/{c.upper()}") == (c, ())
@@ -67,15 +69,19 @@ def test_buy_and_sell_cash_math_with_fees_and_fifo():
     assert "Cash ≈ 1 000 000 HUF" in say(st, "/cash 1000000")
     r = say(st, "/bought nvda 2 100,5")  # 201 USD, minimum fee 3.49 USD, at 350 HUF/USD
     assert "Bought 2 NVDA at 100.5 USD" in r and "fee 3.49 USD" in r
-    assert state.book(st["log"])["cash"] == pytest.approx(1_000_000 - 204.49 * 350)
+    assert "Converted ≈ 72 287 HUF → $204.49 (1% ≈ 716 HUF)" in r  # no USD balance: from HUF at FX x 1.01
+    assert st["log"][-2] == dict(t="fx", ccy="USD", amt=204.49, huf=round(204.49 * 350 * 1.01, 2), auto=True,
+                                 at=st["log"][-1]["at"])
+    assert state.book(st["log"])["cash"] == pytest.approx({"HUF": 1_000_000 - 204.49 * 350 * 1.01, "USD": 0})
     say(st, "/bought NVDA 3 110")
     r = say(st, "/sold NVDA 4 120")  # proceeds 480 - 3.49; FIFO cost 204.49 + 2/3 of 333.49
     pl = (480 - 3.49) * 350 - (204.49 + 333.49 * 2 / 3) * 350
     assert st["log"][-1]["pl_huf"] == round(pl) and "Realised P/L ≈ +" in r
     b = state.book(st["log"])
     assert state.qty(b["pos"]["NVDA"]) == 1
-    assert b["cash"] == pytest.approx(1_000_000 - (204.49 + 333.49 - 476.51) * 350)
-    assert "You hold 1 NVDA, cannot sell 2" in say(st, "/sold NVDA 2 120") and len(st["log"]) == 4
+    # the sale credits USD (no auto-convert back); the two buys were converted from HUF
+    assert b["cash"] == pytest.approx({"HUF": 1_000_000 - (204.49 + 333.49) * 350 * 1.01, "USD": 476.51})
+    assert "You hold 1 NVDA, cannot sell 2" in say(st, "/sold NVDA 2 120") and len(st["log"]) == 6  # 2 conversions
 
 
 def test_huf_trade_uses_bot_ticker_and_needs_no_fx():
@@ -100,7 +106,7 @@ def test_deposit_withdraw_and_undo():
     assert "Nothing to undo" in say(st, "/undo")
     say(st, "/deposit 100000")
     say(st, "/withdraw 30000,5")
-    assert state.book(st["log"])["cash"] == pytest.approx(69_999.5)
+    assert state.book(st["log"])["cash"] == pytest.approx({"HUF": 69_999.5})
     say(st, "/bought MOL.BD 1 3000")
     r = say(st, "/undo")
     assert "Removed: buy 1 MOL.BD at 3000 HUF" in r and "Cash ≈ 70 000 HUF" in r
@@ -148,9 +154,11 @@ def test_bare_tickers_resolve_to_the_universe_and_bot_tickers():
 
 def test_thousands_separators_are_rejected_for_huf_amounts():
     for text in ("/deposit 120.000", "/cash 1,500", "/withdraw 1.200.000", "/cash 120,000.50"):
-        with pytest.raises(ValueError, match="write whole forints"):
+        with pytest.raises(ValueError, match="without thousands separators"):
             commands.parse(text)
-    assert commands.parse("/deposit 120000,5") == ("deposit", (120000.5,))
+    assert commands.parse("/deposit 120000,5") == ("deposit", (120000.5, "HUF"))
+    with pytest.raises(ValueError, match="cash currencies: HUF, USD, EUR"):
+        commands.parse("/cash 100 GBP")
     assert commands.parse("/bought SAP 2 212,345") == ("bought", ("SAP", 2, 212.345))  # prices: decimals are fine
 
 

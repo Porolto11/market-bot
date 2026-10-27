@@ -7,8 +7,9 @@ has any; else env PORTFOLIO_JSON (Actions secret, or a local --portfolio file fo
 --budget-huf (env CLOUD_BUDGET_HUF, default 200 000 HUF). The BUY calls are spread out first (scan.diversify): at
 most 2 per Yahoo sector (ETFs are one sector) and none whose 6-month daily returns correlate more than 0.75 with a
 higher pick; the skipped ones are listed with the reason. The cash then buys a BUY PLAN (scan.plan): the top 3
-picks it can actually buy, in whole shares, value + fee + the 1% FX spread within the cash less 1%, no fee over 1%; the
-other BUYs are a watchlist. Without holdings it gives
+picks it can actually buy, in whole shares, value + fee + buy tax + FX conversion within the cash less 1%, no fee
+over 1%; the other BUYs are a watchlist. The cash is per currency (HUF, USD, EUR): a pick is paid from its own
+currency's balance first, the rest converted from HUF at the 1% spread (the line says which). Without holdings it gives
 market calls only (no SELL calls). Holdings and cash are never printed. The scan ranking (for /top and /scan) and
 the sent calls go into the state (with the call log that /stats scores, see track.py), which is saved only when
 TELEGRAM_TOKEN (its key) is set.
@@ -189,10 +190,24 @@ def plan_lines(i, now, n) -> list:
            + (f" + {fees.tax_label(i['symbol'])} ≈ {_money(i['tax_huf'])}" if i.get("tax_huf") else ""),
            "   " + " · ".join([fmt.scored(i["score"], "/100"), *chips(i),
                                f"⏰ valid till {fmt.day(i['valid_until'], now.date())}"])]
+    if pay := paid_line(i):
+        out.insert(1, f"   {pay}")
     out += [f"   {fmt.flag(f)}" for f in i.get("flags") or []]
     if i.get("dist"):
         out.append(f"   {DIST}")
     return out
+
+
+def paid_line(i) -> str:
+    """How a plan pick is paid (scan.pay): '💵 pay from your USD balance ($905.50)', '💱 convert ≈ X HUF → USD (1% ≈
+    Y HUF)', or both; '' for a HUF pick."""
+    w, own, conv = i.get("wallet_ccy"), i.get("own") or 0.0, i.get("convert_huf") or 0.0
+    if not w or w == "HUF":
+        return ""
+    convert = f"convert ≈ {_money(conv)} → {w} (1% ≈ {_money(i.get('fx_cost_huf') or 0.0)})"
+    if own and conv:
+        return f"💱 {fmt.amount(own, w)} from your {w} balance + {convert}"
+    return f"💵 pay from your {w} balance ({fmt.amount(own, w)})" if own else f"💱 {convert}"
 
 
 def buy_lines(i, now, n=None) -> list:
@@ -257,15 +272,19 @@ def holding_lines(items, portfolio, rates) -> list:
 
 
 def message(items, regime, now, portfolio, cash_huf, has_cash=False, rates=None, alerts=(), switches=(),
-            stops=()) -> str:
-    """The scan message (split it with fmt.split before sending). stops: symbols with a sell-type stop alert."""
+            stops=(), wallet=None) -> str:
+    """The scan message (split it with fmt.split before sending). stops: symbols with a sell-type stop alert.
+    wallet: the cash per currency; with a foreign balance the header shows each and the HUF total."""
     buys, watch = shown(items)
     waits = [i for i in items if i["call"] == "WAIT"][:MAX_BUYS]
     sells = [i for i in items if i["call"] == "SELL"]
     dips = [i for i in items if i["call"] == "WAIT_FOR_DIP"]
     head = [f"📊 Market scan · {fmt.stamp(now)}", fmt.regime(regime)]
     known = has_cash or (portfolio and portfolio.get("cash_huf") is not None)
-    head.append(f"💰 Cash ≈ {_money(cash_huf)}" if known else f"💰 Budget {_money(cash_huf)} (no cash data)")
+    if known and wallet and any(c != "HUF" and abs(v) >= 0.005 for c, v in wallet.items()):
+        head.append(f"💰 Cash ≈ {fmt.cash(wallet)} ≈ {_money(cash_huf)} in total")
+    else:
+        head.append(f"💰 Cash ≈ {_money(cash_huf)}" if known else f"💰 Budget {_money(cash_huf)} (no cash data)")
     old = [fmt.tick(i["symbol"]) for i in items if i.get("stale")]
     if old:
         head.append(f"⚠️ {len(old)} without a fresh close (no calls): " + ", ".join(old[:MAX_STALE])
@@ -377,7 +396,8 @@ def weekly_summary(st, items, regime, holdings, cash_huf, rates, hists, now):
         line = f"💼 Portfolio ≈ {_money(value)} ({what}{f', {missing} without price/FX' if missing else ''})"
         last = st.get("weekly")
         if last and last.get("value"):
-            flows = sum(e["huf"] if e["t"] == "deposit" else -e["huf"] for e in st.get("log") or []
+            flows = sum((1 if e["t"] == "deposit" else -1) * state.total_huf(dict([state.flow(e)]), rates)
+                        for e in st.get("log") or []
                         if e["t"] in ("deposit", "withdraw") and e.get("at", "") > last["at"])
             ch = value - last["value"] - flows
             line += (f"\n{'📈' if ch >= 0 else '📉'} {fmt.signed_huf(ch)} ({fmt.signed(ch / last['value'] * 100)}) "
@@ -468,8 +488,12 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
         return fail(f"price download failed ({type(e).__name__})", token, chat, now, send_fn, out)
     hists, stale = prices.fresh(hists, now)
     rates = fx_rates(hists)
+    if mine:  # the cash per currency, valued in HUF at today's rates
+        portfolio = mine = state.portfolio(st, rates)
     secret_cash = cash_env(env) if not mine or mine["cash_huf"] is None else None
     cash, holdings = cash_and_holdings(portfolio, budget, rates, secret_cash)
+    # the cash per currency for the plan: the state's balances, else CASH_HUF / the portfolio / the budget as HUF
+    wallet = mine["cash"] if mine and mine.get("cash") is not None and secret_cash is None else {"HUF": cash}
     scanned = {s: h for s, h in hists.items() if s not in INDEXES and s not in FX_SYMBOLS.values()}
     if len(scanned) < len(scan.UNIVERSE) // 2:  # a yfinance outage must not look like "no calls today"
         return fail(f"only {len(scanned)} of {len(scan.UNIVERSE)} symbols had prices (data outage?)", token, chat,
@@ -486,7 +510,7 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
           file=out)
     news.apply(items, headlines, now)
     scan.diversify(items, scanned, len(items))
-    scan.plan(items, cash, rates)
+    scan.plan(items, cash, rates, wallet=wallet)
     known = cash if secret_cash is not None or (portfolio or {}).get("cash_huf") is not None else None
     switches = tax.switches(items, portfolio, known, rates, tax.base(st["log"], now.year))
     dipped, dips = watch.dips(scanned, now, st.get("dips") or {})
@@ -494,7 +518,7 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
     stops = [k.split("|")[1] for k, line in watched if k.startswith("stop|") and "consider selling" in line]
     text = message(items, regime, now, portfolio, cash, has_cash=secret_cash is not None, rates=rates,
                    alerts=news.alert_lines(fresh, headlines, now) + [line for _, line in watched], switches=switches,
-                   stops=stops)
+                   stops=stops, wallet=wallet)
     current = calls(items, switches)
     track.score(st, now.date(), hists)
     summary = weekly = None

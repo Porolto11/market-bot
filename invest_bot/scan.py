@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 import numpy as np
 import pandas as pd
 
-from invest_bot import analysis, fees, hours, prices, rules
+from invest_bot import analysis, fees, hours, prices, rules, state
 
 # yfinance symbol: (name, kind, region[, ETF payout: "acc" accumulating, "dist" distributing (taxable payouts)])
 UNIVERSE = {
@@ -369,10 +369,11 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
     return out
 
 
-def cost(i, qty, fx_rates) -> tuple:
-    """(value, fee, buy tax) in HUF of qty shares at the item's limit, all with the bank's 1% FX spread
-    (rules.FX_SPREAD). The tax: fees.buy_tax (FR 0.4%, UK 0.5%, ...; ETFs none)."""
-    rate = huf_rate(i["ccy"], fx_rates) * (1 + (rules.FX_SPREAD if i["ccy"] != "HUF" else 0))
+def cost(i, qty, fx_rates, spread=True) -> tuple:
+    """(value, fee, buy tax) in HUF of qty shares at the item's limit; with spread (the worst case: all of it
+    converted from HUF) at the bank's 1% FX spread (rules.FX_SPREAD), else at the market rate. The tax:
+    fees.buy_tax (FR 0.4%, UK 0.5%, ...; ETFs none)."""
+    rate = huf_rate(i["ccy"], fx_rates) * (1 + (rules.FX_SPREAD if spread and i["ccy"] != "HUF" else 0))
     value = qty * i["limit"] * rate
     return (value, _fee(qty * i["limit"], i["ccy"], fx_rates, i["symbol"]) * rate,
             value * fees.buy_tax(i["symbol"], i.get("kind")))
@@ -383,18 +384,58 @@ def min_qty(i, fx_rates) -> int:
     return max(1, math.ceil(_fee(0.0, i["ccy"], fx_rates, i["symbol"]) / FEE_MAX / i["limit"] - 1e-9))
 
 
-def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE) -> list:
-    """The BUY PLAN: at most picks_max BUY items to buy now, so that value + fee + buy tax + FX spread of all of them stays
-    within cash_huf less a BUFFER for FX drift. Candidates: the BUY items in rank order (after diversify). A pick
-    needs its smallest ticket with a fee of at most FEE_MAX (min_qty, at least 1 share) to fit into the cash / picks_max;
-    the higher-ranked ones that do not are passed over. When fewer fit, a pick may use the cash the others leave
-    (one big pick can take more). Sizing: the cash split equally, floored to whole shares (never below min_qty), then
-    the leftover goes 1 share at a time to the highest-ranked pick that still fits. Sets plan=True, qty, value_huf,
-    fee_huf, fee_pct, tax_huf and approx_huf (value + fee + tax) on the picks and returns them (rank order); WAIT_FOR_DIP items are
-    sized from the cash the plan leaves."""
-    budget = max(0.0, cash_huf or 0) * (1 - BUFFER)
-    cands = [i for i in items if i["call"] == "BUY" and i.get("limit") and huf_rate(i["ccy"], fx_rates)]
-    need = {id(i): sum(cost(i, min_qty(i, fx_rates), fx_rates)) for i in cands}
+def pay(picks, qty, wallet, fx_rates) -> tuple:
+    """Pay the picks in rank order from the balances wallet {currency: amount}: each from its own currency's balance
+    first (GBp: GBP), the shortfall converted from HUF at FX x (1 + rules.FX_SPREAD); HUF items from HUF.
+    ({id(item): (paid from its own balance, in that currency; HUF converted; of which the 1% spread)}, the balances
+    left (a negative one: it does not fit), the HUF-equivalent spend incl. the spread)."""
+    left, out, spend = dict(wallet), {}, 0.0
+    for i in picks:
+        need_huf = sum(cost(i, qty[id(i)], fx_rates, spread=False))
+        w = state.wallet_ccy(i["ccy"])[0]
+        if w == "HUF":
+            left["HUF"] = left.get("HUF", 0.0) - need_huf
+            out[id(i)] = (0.0, 0.0, 0.0)
+            spend += need_huf
+            continue
+        r = huf_rate(w, fx_rates)
+        need = need_huf / r
+        own = min(need, max(0.0, left.get(w, 0.0)))
+        left[w] = left.get(w, 0.0) - own
+        conv = (need - own) * r * (1 + rules.FX_SPREAD)
+        left["HUF"] = left.get("HUF", 0.0) - conv
+        out[id(i)] = (own, conv, (need - own) * r * rules.FX_SPREAD)
+        spend += own * r + conv
+    return out, left, spend
+
+
+def _fits(left) -> bool:
+    return all(v >= -1e-6 for v in left.values())
+
+
+def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE, wallet=None) -> list:
+    """The BUY PLAN: at most picks_max BUY items to buy now. wallet: the cash per currency ({currency: amount};
+    default: cash_huf, all HUF). Each pick is paid from its own currency's balance first, the rest converted from
+    HUF at the 1% FX spread (pay); every balance keeps a BUFFER for FX drift, so the HUF-equivalent spend (value +
+    fee + buy tax + conversion) stays within the cash less the BUFFER, and no balance goes below 0. Candidates: the
+    BUY items in rank order (after diversify). A pick needs its smallest ticket with a fee of at most FEE_MAX (min_qty,
+    at least 1 share) to fit into the cash / picks_max; the higher-ranked ones that do not are passed over. When fewer
+    fit, a pick may use the cash the others leave (one big pick can take more). Sizing: the cash split equally,
+    floored to whole shares (never below min_qty), then the leftover goes 1 share at a time to the highest-ranked pick
+    that still fits. Sets plan=True, qty, value_huf, fee_huf, fee_pct, tax_huf (at the market rate), wallet_ccy,
+    own (paid from that balance), convert_huf, fx_cost_huf (the 1% of it) and approx_huf (value + fee + tax + FX cost)
+    on the picks and returns them (rank order); WAIT_FOR_DIP items are sized from the cash the plan leaves."""
+    if wallet is None:
+        wallet = {"HUF": cash_huf or 0}
+    wallet = {c: max(0.0, v) * (1 - BUFFER) for c, v in wallet.items()}
+    budget = state.total_huf(wallet, fx_rates)
+    cands = [i for i in items if i["call"] == "BUY" and i.get("limit") and huf_rate(i["ccy"], fx_rates)
+             and huf_rate(state.wallet_ccy(i["ccy"])[0], fx_rates)]
+
+    def alone(i):
+        _, left, spend = pay([i], {id(i): min_qty(i, fx_rates)}, wallet, fx_rates)
+        return spend if _fits(left) else math.inf
+    need = {id(i): alone(i) for i in cands}
     picks = [i for i in cands if need[id(i)] <= budget / picks_max][:picks_max]
     left = budget * (1 - len(picks) / picks_max)
     for i in cands:  # fewer than picks_max fit: one may use the cash the others leave
@@ -402,28 +443,33 @@ def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE) -> list:
             picks.append(i)
             left -= need[id(i)]
     picks.sort(key=cands.index)
-    qty = {id(i): max(min_qty(i, fx_rates), size(budget / len(picks), i["limit"], i["ccy"], fx_rates, i["symbol"], i.get("kind"))[0] or 0)
+    qty = {id(i): max(min_qty(i, fx_rates),
+                      size(budget / len(picks), i["limit"], i["ccy"], fx_rates, i["symbol"], i.get("kind"))[0] or 0)
            for i in picks}
 
-    def total():
-        return sum(sum(cost(i, qty[id(i)], fx_rates)) for i in picks)
-    while total() > budget:  # a big pick took more than an equal share: trim the others, lowest rank first
-        i = next(i for i in reversed(picks) if qty[id(i)] > min_qty(i, fx_rates))
-        qty[id(i)] -= 1
-    spent = total()
-    while True:  # the leftover: 1 share at a time to the highest-ranked pick that still fits
+    def fits():
+        return _fits(pay(picks, qty, wallet, fx_rates)[1])
+    while picks and not fits():  # a big pick took more than an equal share: trim the others, lowest rank first
+        i = next((i for i in reversed(picks) if qty[id(i)] > min_qty(i, fx_rates)), None)
+        if i is None:  # all at their smallest ticket and the balances still fall short: drop the lowest pick
+            picks.pop()
+        else:
+            qty[id(i)] -= 1
+    while picks:  # the leftover: 1 share at a time to the highest-ranked pick that still fits
         for i in picks:
-            extra = sum(cost(i, qty[id(i)] + 1, fx_rates)) - sum(cost(i, qty[id(i)], fx_rates))
-            if spent + extra <= budget:
-                qty[id(i)] += 1
-                spent += extra
+            qty[id(i)] += 1
+            if fits():
                 break
+            qty[id(i)] -= 1
         else:
             break
+    paid, _, spent = pay(picks, qty, wallet, fx_rates)
     for i in picks:
-        value, fee, tax = cost(i, qty[id(i)], fx_rates)
+        value, fee, tax = cost(i, qty[id(i)], fx_rates, spread=False)
+        own, conv, fx_cost = paid[id(i)]
         i.update(plan=True, qty=qty[id(i)], value_huf=value, fee_huf=fee, fee_pct=fee / value, tax_huf=tax,
-                 approx_huf=value + fee + tax)
+                 wallet_ccy=state.wallet_ccy(i["ccy"])[0], own=own, convert_huf=conv, fx_cost_huf=fx_cost,
+                 approx_huf=value + fee + tax + fx_cost)
     for i in items:
         if i["call"] == "WAIT_FOR_DIP" and i.get("limit"):
             i["qty"], i["approx_huf"], _ = size(budget - spent, i["limit"], i["ccy"], fx_rates, i["symbol"],

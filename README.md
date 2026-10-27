@@ -31,7 +31,10 @@ by market, shown on the line ("+ FR tax 0.4% ≈ 1 200 HUF"): France 0.4%, Spain
 Irish shares 1% (by listing, an approximation). A pick needs its
 smallest ticket with a K&H fee of at most 1% to fit into a third of the cash (when fewer fit, one may use the rest);
 the cash is split equally in whole shares and the leftover goes to the highest-ranked pick. Value + fee + K&H's 1% FX
-conversion spread always stay within the cash less a 1% buffer. The other BUY calls are a watchlist (names and scores). The picks are spread out:
+conversion spread always stay within the cash less a 1% buffer. The cash is per currency: a pick paid from its
+own currency's balance has no FX cost ("💵 pay from your USD balance"), otherwise the line says "💱 convert ≈ X HUF
+→ USD (1% ≈ Y HUF)"; each balance keeps the 1% buffer, and the conversions come out of HUF. The header and
+/holdings show each balance and the HUF total. The other BUY calls are a watchlist (names and scores). The picks are spread out:
 at most 2 per sector (Yahoo's sector; ETFs count as one) and none whose 6-month daily returns correlate more than
 0.75 with a higher pick ("skipped: too similar to MU"). The Monday morning scan also sends a short weekly
 summary: portfolio value in HUF and its change since the last summary (deposits and withdrawals left out), the
@@ -70,6 +73,7 @@ ever; long messages are split at section boundaries.
 
 - `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID`: the bot token and the chat to message.
 - `CASH_HUF`, `PORTFOLIO_JSON` (optional fallbacks): cash and holdings, used only while the bot state (below) has none.
+  This cash, like the budget, counts as HUF, so every foreign pick in the plan is converted at 1%.
 
 Optional repo variable `CLOUD_BUDGET_HUF` (default 200 000): the budget used to size BUY calls when no cash is given.
 The listener also uses the job's own `GITHUB_TOKEN` (no setup) to request its next run.
@@ -93,7 +97,15 @@ answered.
   ticker (`MOL`, `CSPX`, `SAP`, `OTP`) or a Yahoo symbol (`MOL.BD`, `NVDA`); a symbol found only on Yahoo is
   recorded in Yahoo's currency, which the reply names. Cash changes by the value plus the K&H fee (and a buy's transaction tax);
   each sale keeps a FIFO realised P/L in HUF, with the fees and buy taxes in the cost (deductible).
-- `/deposit HUF`, `/withdraw HUF`, `/cash HUF` (sets your real balance; send it after entering your holdings).
+- `/deposit AMOUNT [HUF|USD|EUR]`, `/withdraw AMOUNT [CCY]`, `/cash AMOUNT [CCY]` (sets that currency's real
+  balance; send it after entering your holdings). No currency means HUF, as before. A Platinum account holds HUF,
+  USD and EUR, so cash is kept per currency (the earlier single cash value counts as HUF). `/bought` pays from the
+  instrument's own currency first; only a shortfall is converted, from HUF at Yahoo FX x 1.01 (K&H's 1%), and
+  recorded as a conversion entry that `/undo` removes with the buy. GBp prices pay from GBP, and DKK from DKK,
+  converted from HUF too when there is no such balance (only HUF is converted from, to keep it simple). `/sold`
+  credits the instrument's currency, with no automatic conversion back: if K&H converts the proceeds (e.g. DKK or
+  GBP, which Platinum does not hold), set the balances again with `/cash`. Trades recorded before any cash was set
+  move HUF at the trade's FX, as before.
   Whole forints without separators: `120000`, not `120.000`.
 - `/holdings`, `/top` (top 10 of the last scan), `/stats` (hit rate and average edge vs CSPX.L of the sent
   calls after about 1, 3 and 6 months; "too early" under 10 scored calls), `/tax` (realised P/L this year, the estimated 15% tax (MNB rates, losses carried 2 years) and the

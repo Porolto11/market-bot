@@ -6,7 +6,9 @@
 Only private-chat messages from TELEGRAM_CHAT_ID (chat and sender) are handled; anything else is skipped silently.
 The getUpdates offset lives in the state, so a command is handled once. A reply that cannot be sent waits in the
 state's outbox and goes out first on the next run, unless Telegram refused it for good (400 / 403: logged and
-dropped). On a weekday with no market scan for over 26 weekday hours it warns once a day (precheck.overdue). Prices are in the instrument's currency; HUF values use
+dropped). Cash is per currency (HUF, USD, EUR; state.book): a buy pays from its own currency first and the
+shortfall is converted from HUF at 1% (an fx entry, undone with the buy); a sale credits its own currency. On a
+weekday with no market scan for over 26 weekday hours it warns once a day (precheck.overdue). Prices are in the instrument's currency; HUF values use
 approximate Yahoo FX. Holdings and amounts are never printed to the log.
 """
 import json
@@ -26,8 +28,8 @@ HELP = """🤖 Invest Bot commands
 📝 Record
 🟢 /bought SYM QTY PRICE — a buy, whole shares (cash goes down by value + K&H fee + buy tax)
 🔴 /sold SYM QTY PRICE — a sale (FIFO P/L kept for tax)
-💰 /deposit HUF · /withdraw HUF — change cash (write 120000, not 120.000)
-🏦 /cash HUF — set cash to your real K&H balance
+💰 /deposit AMOUNT [HUF|USD|EUR] · /withdraw AMOUNT [CCY] — change cash (write 120000, not 120.000)
+🏦 /cash AMOUNT [HUF|USD|EUR] — set that currency's cash to your real K&H balance (no currency: HUF)
 ↩️ /undo — remove the last trade or cash entry
 
 🔎 Look
@@ -41,8 +43,9 @@ HELP = """🤖 Invest Bot commands
 SYM: a bot ticker (MOL, CSPX, SAP, OTP) or a Yahoo symbol (MOL.BD, NVDA, SAP.DE)."""
 RESET = "State was reset (it could not be decrypted, e.g. the bot token changed): please re-enter holdings and cash."
 DELAYED = "(delayed reply) "
-USAGE = {"bought": "/bought SYM QTY PRICE", "sold": "/sold SYM QTY PRICE", "deposit": "/deposit HUF",
-         "withdraw": "/withdraw HUF", "cash": "/cash HUF", "scan": "/scan SYM"}
+USAGE = {"bought": "/bought SYM QTY PRICE", "sold": "/sold SYM QTY PRICE", "deposit": "/deposit AMOUNT [HUF|USD|EUR]",
+         "withdraw": "/withdraw AMOUNT [HUF|USD|EUR]", "cash": "/cash AMOUNT [HUF|USD|EUR]", "scan": "/scan SYM"}
+MONEY = ("deposit", "withdraw", "cash")  # AMOUNT and an optional currency (default HUF)
 ARGS = {"bought": 3, "sold": 3, "deposit": 1, "withdraw": 1, "cash": 1, "scan": 1,
         "holdings": 0, "top": 0, "stats": 0, "tax": 0, "undo": 0, "help": 0, "start": 0}
 CALL = {"BUY": "🟢 BUY", "WAIT": "⏳ WAIT", "WAIT_FOR_DIP": "🪤 WAIT FOR DIP", "HOLD": "✋ HOLD", "SELL": "🔴 SELL",
@@ -64,21 +67,23 @@ def parse(text):
     if cmd not in ARGS:
         raise ValueError("Unknown command. Send /help for the list.")
     args = words[1:]
-    if len(args) != ARGS[cmd]:
+    if len(args) != ARGS[cmd] and not (cmd in MONEY and len(args) == 2):
         raise ValueError(f"Usage: {USAGE.get(cmd, '/' + cmd)}")
-    if cmd in ("deposit", "withdraw", "cash") and THOUSANDS.search(args[0]):
-        raise ValueError(f"Ambiguous amount {args[0]}: write whole forints without separators, e.g. 120000.")
+    if cmd in MONEY and THOUSANDS.search(args[0]):
+        raise ValueError(f"Ambiguous amount {args[0]}: write it without thousands separators, e.g. 120000.")
+    if cmd in MONEY and len(args) == 2 and args[1].upper() not in state.HELD:
+        raise ValueError(f"Usage: {USAGE[cmd]} (cash currencies: {', '.join(state.HELD)})")
     try:
         if cmd in ("bought", "sold"):
             q, px = num(args[1]), num(args[2])
             if q <= 0 or q != int(q) or px <= 0:
                 raise ValueError
             return cmd, (args[0].upper(), int(q), px)
-        if cmd in ("deposit", "withdraw", "cash"):
+        if cmd in MONEY:
             v = num(args[0])
             if v < 0 or (v == 0 and cmd != "cash"):
                 raise ValueError
-            return cmd, (v,)
+            return cmd, (v, args[1].upper() if len(args) == 2 else "HUF")
     except ValueError:
         raise ValueError(f"Usage: {USAGE[cmd]} (QTY a whole number, amounts positive)") from None
     return cmd, tuple(a.upper() for a in args)
@@ -88,10 +93,15 @@ def _huf(x) -> str:
     return f"{rules._huf(x)} HUF"
 
 
-def _cash(cash) -> str:
+def _cash(cash, rates=None) -> str:
+    """'Cash ≈ 120 000 HUF · $500.00 (≈ 295 000 HUF in total).' cash: {currency: balance} or None; the total only
+    with rates and a foreign balance."""
     if cash is None:
-        return "Cash not set yet: send /cash HUF."
-    return f"Cash ≈ {_huf(cash)}." + (" Warning: cash is below 0, check it with /cash." if cash < 0 else "")
+        return "Cash not set yet: send /cash AMOUNT [HUF|USD|EUR]."
+    foreign = any(c != "HUF" and abs(v) >= 0.005 for c, v in cash.items())
+    total = f" (≈ {fmt.huf(state.total_huf(cash, rates))} in total)" if rates and foreign else ""
+    return (f"Cash ≈ {fmt.cash(cash)}{total}."
+            + (" Warning: cash is below 0, check it with /cash." if any(v < -0.005 for v in cash.values()) else ""))
 
 
 def resolve(sym, pos, download_fn):
@@ -170,6 +180,18 @@ def trade(st, side, sym, q, px, now, download_fn, info_fn, mnb_fn=mnb.fetch) -> 
         note = (f" MNB rate {rules._px(e['fx_mnb'])} HUF/{ccy} for tax." if e["fx_mnb"] else
                 " No MNB rate yet: tax uses Yahoo FX (approx) until /tax finds it.")
     huf = (q * px + (fee + e.get("tax", 0.0) if side == "buy" else -fee)) * fx
+    conv = None
+    if b["cash"] is not None:  # cash known: the trade pays from / into its own currency's balance
+        e["wallet"] = True
+        w, k = state.wallet_ccy(ccy)
+        short = (q * px + fee + e.get("tax", 0.0)) * k - max(0.0, b["cash"].get(w, 0.0))
+        if side == "buy" and w != "HUF" and short > 1e-9:  # the shortfall is converted from HUF at FX x 1.01
+            wfx = scan.huf_rate(w, rates)
+            if wfx is None:
+                return f"No {w}/HUF rate from Yahoo right now: nothing recorded, try again later."
+            conv = dict(t="fx", ccy=w, amt=round(short, 4), huf=round(short * wfx * (1 + rules.FX_SPREAD), 2),
+                        auto=True, at=e["at"])
+            st["log"].append(conv)
     st["log"].append(e)
     after = state.book(st["log"])
     word = "Bought" if side == "buy" else "Sold"
@@ -180,7 +202,10 @@ def trade(st, side, sym, q, px, now, download_fn, info_fn, mnb_fn=mnb.fetch) -> 
     if side == "sell":
         e["pl_huf"] = round(after["realised"][-1])
         text += f" Realised P/L ≈ {e['pl_huf']:+,.0f} HUF (FIFO).".replace(",", " ")
-    return text + " " + _cash(after["cash"]) + note
+    if conv:
+        text += (f" Converted ≈ {_huf(conv['huf'])} → {fmt.amount(conv['amt'], conv['ccy'])} "
+                 f"(1% ≈ {_huf(conv['huf'] - conv['huf'] / (1 + rules.FX_SPREAD))}).")
+    return text + " " + _cash(after["cash"], rates) + note
 
 
 def holdings(st, now, download_fn) -> str:
@@ -220,9 +245,9 @@ def holdings(st, now, download_fn) -> str:
     year = str(now.year)
     pl = sum(e.get("pl_huf", 0) for e in st["log"] if e["t"] == "sell" and e["at"].startswith(year))
     excl = f" (excl. {missing} without price/FX)" if missing else ""
-    lines.append(f"\n📦 Holdings ≈ {_huf(total)}{excl}. 💰 {_cash(b['cash'])}")
+    lines.append(f"\n📦 Holdings ≈ {_huf(total)}{excl}. 💰 {_cash(b['cash'], rates)}")
     if b["cash"] is not None:
-        lines.append(f"🧮 Total ≈ {_huf(total + b['cash'])}{excl}")
+        lines.append(f"🧮 Total ≈ {_huf(total + state.total_huf(b['cash'], rates))}{excl}")
     lines.append(f"🧾 Realised P/L {year} ≈ {fmt.signed_huf(pl)}")
     if us := tax.us_stocks(b["pos"]):
         lines.append(f"💵 US stocks ({', '.join(fmt.tick(s) for s in us)}): {tax.US_DIVIDENDS}.")
@@ -259,7 +284,8 @@ def scan_one(st, sym, now, download_fn, info_fn) -> str:
         fund = {}
     moms = (st.get("scan") or {}).get("moms")
     held = {k: state.qty(p) for k, p in b["pos"].items()}
-    items = scan.run_scan({s: hists[s]}, {s: fund}, now, b["cash"], held, rates, moms, stale)
+    cash = None if b["cash"] is None else state.total_huf(b["cash"], rates)
+    items = scan.run_scan({s: hists[s]}, {s: fund}, now, cash, held, rates, moms, stale)
     if not items:
         return f"Not enough price data for {s}."
     i = items[0]
@@ -297,15 +323,20 @@ def handle(st, text, now, download_fn=prices.download, info_fn=prices.info, mnb_
         return HELP
     if cmd in ("bought", "sold"):
         return trade(st, "buy" if cmd == "bought" else "sell", *args, now, download_fn, info_fn, mnb_fn)
-    if cmd in ("deposit", "withdraw", "cash"):
-        st["log"].append(dict(t=cmd, huf=args[0], at=now.isoformat(timespec="seconds")))
-        return f"{cmd.capitalize()} {_huf(args[0])} recorded. {_cash(state.book(st['log'])['cash'])}"
+    if cmd in MONEY:
+        v, ccy = args
+        at = now.isoformat(timespec="seconds")  # HUF entries keep the old shape (huf=...)
+        st["log"].append(dict(t=cmd, huf=v, at=at) if ccy == "HUF" else dict(t=cmd, ccy=ccy, amt=v, at=at))
+        return f"{cmd.capitalize()} {fmt.amount(v, ccy)} recorded. {_cash(state.book(st['log'])['cash'])}"
     if cmd == "undo":
         if not st["log"]:
             return "Nothing to undo."
         e = st["log"].pop()
         what = (f"{e['t']} {e['qty']} {e['sym']} at {rules._px(e['price'])} {e['ccy']}" if "sym" in e
-                else f"{e['t']} {_huf(e['huf'])}")
+                else f"{e['t']} {fmt.amount(state.flow(e)[1], state.flow(e)[0])}")
+        if "sym" in e and st["log"] and st["log"][-1]["t"] == "fx" and st["log"][-1].get("auto"):
+            c = st["log"].pop()  # the conversion recorded with this buy goes too
+            what += f" and its conversion {_huf(c['huf'])} → {fmt.amount(c['amt'], c['ccy'])}"
         return f"Removed: {what}. {_cash(state.book(st['log'])['cash'])}"
     if cmd == "holdings":
         return holdings(st, now, download_fn)
