@@ -1,0 +1,50 @@
+name: telegram-commands
+
+# Manual / debug only: the always-on listener (listen.yml) handles the commands. A run started while the listener
+# runs waits for it (same concurrency group) and may be replaced by the listener's next run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bot-state  # shared with listen.yml and scan.yml: state writes never race
+  cancel-in-progress: false
+
+jobs:
+  commands:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the state branch (stops the job if it cannot be read)
+        run: bash .github/state.sh get
+
+      - name: Anything to do? (stdlib only, no installs)
+        id: pre
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        run: python3 -m invest_bot.precheck >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        if: steps.pre.outputs.work == '1'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        if: steps.pre.outputs.work == '1'
+        run: pip install -r requirements-cloud.txt
+
+      - name: Handle Telegram commands
+        if: steps.pre.outputs.work == '1'
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m invest_bot.commands
+
+      - name: Save the state to the state branch
+        if: always() && steps.pre.outputs.work == '1'  # commands handled before a failure must not run twice
+        run: bash .github/state.sh save "state from commands"

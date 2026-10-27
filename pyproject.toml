@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invest-bot"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "yfinance",
+    "exchange_calendars",
+    "pandas",
+    "numpy",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["invest_bot"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:exchange_calendars.*",
+    "ignore::FutureWarning:exchange_calendars.*",
+    "ignore::DeprecationWarning:pandas.*",
+    "ignore::FutureWarning:pandas.*",
+]

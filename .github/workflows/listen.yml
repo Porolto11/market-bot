@@ -1,0 +1,45 @@
+name: telegram-listener
+
+# Always on: each run listens for 345 min (replies within seconds, scans at 06:50 and 21:15 UTC on weekdays), then
+# requests the next run with workflow_dispatch. The schedule is only a fallback that restarts a broken chain; such
+# a run exits at once when another listener run is active or queued. Logs are public: they show counts only.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "13 */2 * * *"
+
+permissions:
+  contents: write  # push the state branch
+  actions: write   # dispatch the next run
+
+concurrency:
+  group: bot-state  # shared with scan.yml and commands.yml: one state writer at a time
+  cancel-in-progress: false
+
+jobs:
+  listen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the state branch (stops the job if it cannot be read)
+        run: bash .github/state.sh get
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements-cloud.txt
+
+      - name: Listen, scan and hand over to the next run
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CASH_HUF: ${{ secrets.CASH_HUF }}  # fallback when the bot state has no cash; never printed
+          PORTFOLIO_JSON: ${{ secrets.PORTFOLIO_JSON }}  # fallback when the bot state has no holdings
+          CLOUD_BUDGET_HUF: ${{ vars.CLOUD_BUDGET_HUF }}
+          GITHUB_TOKEN: ${{ github.token }}  # the next run's dispatch and the fallback's duplicate check
+        run: python -m invest_bot.listen --max-minutes 345

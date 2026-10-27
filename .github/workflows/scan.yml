@@ -1,0 +1,49 @@
+name: market-scan
+
+# Manual / debug only: the always-on listener (listen.yml) runs the scans at 06:50 and 21:15 UTC on weekdays. A run
+# started while the listener runs waits for it (same concurrency group) and may be replaced by the listener's next run.
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Send the Telegram message even if the calls did not change"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bot-state  # shared with listen.yml and commands.yml: state writes never race
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the state branch (stops the job if it cannot be read)
+        run: bash .github/state.sh get
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements-cloud.txt
+
+      - name: Scan and send
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CASH_HUF: ${{ secrets.CASH_HUF }}  # fallback when the bot state has no cash; never printed
+          PORTFOLIO_JSON: ${{ secrets.PORTFOLIO_JSON }}  # fallback when the bot state has no holdings
+          CLOUD_BUDGET_HUF: ${{ vars.CLOUD_BUDGET_HUF }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '--force' || '' }}
+        run: python -m invest_bot.cloud --state state/state.enc $FORCE
+
+      - name: Save the state to the state branch
+        run: bash .github/state.sh save "state from scan"
