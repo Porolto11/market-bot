@@ -26,7 +26,9 @@ symbol without a close for its exchange's last completed session gets no BUY or 
 shares fit your budget. The BUY section is a BUY PLAN: the top 3 picks your cash (or the budget) can actually buy,
 e.g. "Buy 3× Micron (MU) at ≤ $905.5 ≈ 897 000 HUF + fee 2 150 HUF (0.24%)", and a total line. The K&H fee is 0.24% with a
 minimum per market (by the exchange suffix: US 3.49 USD, BÉT 349 HUF, Xetra/Euronext/LSE/Dublin 3.49 EUR, Nordic,
-Swiss, Vienna, Madrid and Milan 11.99 EUR, converted to the trade currency, e.g. DKK for Novo Nordisk). A pick needs its
+Swiss, Vienna, Madrid and Milan 11.99 EUR, converted to the trade currency, e.g. DKK for Novo Nordisk). Shares (not ETFs) also pay a buy-side transaction tax
+by market, shown on the line ("+ FR tax 0.4% ≈ 1 200 HUF"): France 0.4%, Spain and Italy 0.2%, UK stamp duty 0.5%,
+Irish shares 1% (by listing, an approximation). A pick needs its
 smallest ticket with a K&H fee of at most 1% to fit into a third of the cash (when fewer fit, one may use the rest);
 the cash is split equally in whole shares and the leftover goes to the highest-ranked pick. Value + fee + K&H's 1% FX
 conversion spread always stay within the cash less a 1% buffer. The other BUY calls are a watchlist (names and scores). The picks are spread out:
@@ -89,8 +91,8 @@ answered.
 - `/bought SYM QTY PRICE`, `/sold SYM QTY PRICE`: record a trade you made in K&H. QTY is whole shares only. PRICE
   is in the instrument's currency and takes a decimal comma or dot (`120,5` or `120.5`). SYM is a bot ticker or bare
   ticker (`MOL`, `CSPX`, `SAP`, `OTP`) or a Yahoo symbol (`MOL.BD`, `NVDA`); a symbol found only on Yahoo is
-  recorded in Yahoo's currency, which the reply names. Cash changes by the value plus the K&H fee; each sale keeps
-  a FIFO realised P/L in HUF.
+  recorded in Yahoo's currency, which the reply names. Cash changes by the value plus the K&H fee (and a buy's transaction tax);
+  each sale keeps a FIFO realised P/L in HUF, with the fees and buy taxes in the cost (deductible).
 - `/deposit HUF`, `/withdraw HUF`, `/cash HUF` (sets your real balance; send it after entering your holdings).
   Whole forints without separators: `120000`, not `120.000`.
 - `/holdings`, `/top` (top 10 of the last scan), `/stats` (hit rate and average edge vs CSPX.L of the sent

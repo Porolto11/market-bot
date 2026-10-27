@@ -8,6 +8,7 @@ HUF amounts: realised P/L at the official MNB rate of the buy and the sell day (
 included), or the trade's Yahoo FX where no MNB rate was recorded (approximate); today's values at approximate
 Yahoo FX. A rough guide, not tax advice.
 """
+from invest_bot import fees as fees_mod
 from invest_bot import fmt, hours, prices, rules, scan, state
 
 RATE = 0.15  # SZJA; exchange trades carry no szocho
@@ -81,7 +82,7 @@ def switches(items, portfolio, cash, rates, ytd_pl) -> list:
     kept), has a fresh close (a stale one abstains, like its SELL call), scores at least GAP below the pick and is not a winner (score < STRONG, or its call is SELL). Losers come
     first (no tax, and the loss offsets this year's gains), then the lowest score.
     The whole position is sold, so its FIFO cost is the sum of its lots = avg cost x qty. Tax: tax_on (offset by
-    this year's realised losses). Fees: the K&H commission of both trades.
+    this year's realised losses). Fees: the K&H commission of both trades plus the buy-side tax of the pick (fees.buy_tax).
     Expected edge, a heuristic and nothing more: each score point of gap is worth about 0.2% of the switched value
     (min of the sale proceeds and the buy), so gap x 0.2% x value must exceed tax + fees."""
     if not portfolio or not portfolio.get("holdings") or cash is None:
@@ -107,11 +108,13 @@ def switches(items, portfolio, cash, rates, ytd_pl) -> list:
             gap = pick["score"] - c["i"]["score"]
             if gap < GAP:
                 continue
-            m, cost, _ = scan.size(cash + c["proceeds"], pick["limit"], pick["ccy"], rates, pick["symbol"])
+            m, cost, _ = scan.size(cash + c["proceeds"], pick["limit"], pick["ccy"], rates, pick["symbol"],
+                                   pick.get("kind"))
             if not m:
                 continue
+            levy = fees_mod.buy_tax(pick["symbol"], pick.get("kind"))  # FR 0.4%, UK stamp duty, ...: a cost too
             fees = c["fee"] + (scan._fee(m * pick["limit"], pick["ccy"], rates, pick["symbol"])
-                               * scan.huf_rate(pick["ccy"], rates))
+                               + m * pick["limit"] * levy) * scan.huf_rate(pick["ccy"], rates)
             tax = max(0.0, tax_on(c["gain"], ytd_pl))  # a loss: no tax now (its saving shows in the note)
             if gap * EDGE_PER_POINT * min(c["proceeds"], cost) <= tax + fees:
                 continue
@@ -120,7 +123,8 @@ def switches(items, portfolio, cash, rates, ytd_pl) -> list:
                      + (f", saving ≈ {fmt.approx(saved)} HUF tax" if saved > 0 else "")) if c["gain"] < 0 else "")
             out.append((f"Sell {c['q']}× {fmt.tick(c['i']['symbol'])} ({c['i']['score']}) → buy {m}× "
                         f"{fmt.tick(pick['symbol'])} ({pick['score']})\n"
-                        f"   💸 Tax now ≈ {fmt.approx(tax)} HUF · fees ≈ {fmt.approx(fees)} HUF{note}",
+                        f"   💸 Tax now ≈ {fmt.approx(tax)} HUF · fees ≈ {fmt.approx(fees)} HUF"
+                        + (f" (incl. {fees_mod.tax_label(pick['symbol'])})" if levy else "") + note,
                         c["i"]["symbol"], pick["symbol"]))
             cands.remove(c)
             ytd_pl += c["gain"]

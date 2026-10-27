@@ -17,14 +17,14 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from invest_bot import cloud, fmt, mnb, precheck, prices, rules, scan, state, tax, track
+from invest_bot import cloud, fees, fmt, mnb, precheck, prices, rules, scan, state, tax, track
 
 UPDATES = "https://api.telegram.org/bot{token}/getUpdates?{query}"
 TOP = 10
 HELP = """🤖 Invest Bot commands
 
 📝 Record
-🟢 /bought SYM QTY PRICE — a buy, whole shares (cash goes down by value + K&H fee)
+🟢 /bought SYM QTY PRICE — a buy, whole shares (cash goes down by value + K&H fee + buy tax)
 🔴 /sold SYM QTY PRICE — a sale (FIFO P/L kept for tax)
 💰 /deposit HUF · /withdraw HUF — change cash (write 120000, not 120.000)
 🏦 /cash HUF — set cash to your real K&H balance
@@ -122,6 +122,16 @@ def currency(sym, pos, info_fn):
         return scan.default_ccy(sym)
 
 
+def kind(sym, info_fn) -> str:
+    """'etf' for an ETF / ETC (no buy-side tax), else 'stock': the scan universe's kind, else Yahoo's quote type."""
+    if sym in scan.UNIVERSE:
+        return scan.UNIVERSE[sym][1]
+    try:
+        return "etf" if (info_fn(sym) or {}).get("quoteType") in ("ETF", "MUTUALFUND") else "stock"
+    except Exception:
+        return "stock"
+
+
 def _rates(download_fn, extra=(), period="5d"):
     """(histories, FX rates) for the extra symbols plus the FX pairs, in one download."""
     try:
@@ -150,18 +160,22 @@ def trade(st, side, sym, q, px, now, download_fn, info_fn, mnb_fn=mnb.fetch) -> 
         return f"No {ccy}/HUF rate from Yahoo right now: nothing recorded, try again later."
     fee = scan._fee(q * px, ccy, rates, s)
     e = dict(t=side, sym=s, qty=q, price=px, ccy=ccy, fx=fx, fee=round(fee, 4), at=now.isoformat(timespec="seconds"))
+    levy = fees.buy_tax(s, kind(s, info_fn)) if side == "buy" else 0.0
+    if levy:
+        e["tax"] = round(q * px * levy, 4)
     note = ""
     if ccy != "HUF":  # the tax figures use the official MNB rate of the trade day
         day = fmt.local(now).date()
         e["fx_mnb"] = mnb.rate(ccy, day, st.setdefault("mnb", {}), day, mnb_fn)
         note = (f" MNB rate {rules._px(e['fx_mnb'])} HUF/{ccy} for tax." if e["fx_mnb"] else
                 " No MNB rate yet: tax uses Yahoo FX (approx) until /tax finds it.")
-    huf = (q * px + (fee if side == "buy" else -fee)) * fx
+    huf = (q * px + (fee + e.get("tax", 0.0) if side == "buy" else -fee)) * fx
     st["log"].append(e)
     after = state.book(st["log"])
     word = "Bought" if side == "buy" else "Sold"
     text = (f"Recorded in {ccy} — /undo if wrong. " if from_yahoo else "") + (
-        f"{word} {q} {s} at {rules._px(px)} {ccy} (fee {fee:.2f} {ccy}), "
+        f"{word} {q} {s} at {rules._px(px)} {ccy} (fee {fee:.2f} {ccy}"
+        + (f" + {fees.tax_label(s)} {e['tax']:.2f} {ccy}" if levy else "") + "), "
         f"{'cost' if side == 'buy' else 'proceeds'} ≈ {_huf(huf)}.")
     if side == "sell":
         e["pl_huf"] = round(after["realised"][-1])

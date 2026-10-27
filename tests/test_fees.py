@@ -43,3 +43,31 @@ def test_novo_needs_more_shares_for_a_fee_under_1_percent():
     fx = {"EUR": 400.0, "DKK": 53.0}
     novo = dict(symbol="NOVO-B.CO", ccy="DKK", limit=400.0)
     assert scan.min_qty(novo, fx) == 23  # 11.99 EUR ≈ 90.5 DKK; / 1% = 9 050 DKK; / 400 DKK a share
+
+
+def test_buy_side_taxes_by_market_and_etfs_are_exempt():
+    from invest_bot import fees
+    assert [fees.buy_tax(s) for s in ("MC.PA", "X.MC", "X.MI", "X.L", "X.IR", "NVDA", "SAP.DE", "MOL.BD")] == [
+        0.004, 0.002, 0.002, 0.005, 0.01, 0.0, 0.0, 0.0]
+    assert fees.buy_tax("CSPX.L", "etf") == 0.0 and fees.buy_tax("MC.PA", "etf") == 0.0
+    assert fees.tax_label("AIR.PA") == "FR tax 0.4%" and fees.tax_label("X.L") == "UK stamp duty 0.5%"
+
+
+def test_buy_tax_in_the_sizing_and_the_plan():
+    from datetime import datetime, timezone
+    from invest_bot import cloud, scan
+    fx = {"USD": 350.0, "EUR": 400.0}
+    q, approx, one = scan.size(1_000_000, 100.0, "EUR", fx, "MC.PA", "stock")
+    assert one == pytest.approx((100 * 1.004 + 3.49) * 400 * 1.01)
+    assert approx == pytest.approx((q * 100 * 1.004 + max(q * 100 * 0.0024, 3.49)) * 400)
+    lvmh = dict(symbol="MC.PA", name="LVMH", kind="stock", call="BUY", ccy="EUR", limit=100.0, score=90,
+                valid_until="2026-10-28", flags=[])
+    picks = scan.plan([lvmh], 1_000_000, fx)
+    value, fee, tax = scan.cost(lvmh, lvmh["qty"], fx)
+    assert picks and tax == pytest.approx(value * 0.004) and lvmh["tax_huf"] == pytest.approx(tax)
+    assert lvmh["approx_huf"] == pytest.approx(value + fee + tax) and lvmh["approx_huf"] <= 990_000
+    line = cloud.plan_lines(lvmh, datetime(2026, 10, 27, 9, tzinfo=timezone.utc), 1)[0]
+    assert f"+ FR tax 0.4% ≈ {cloud._money(tax)}" in line
+    etf = dict(lvmh, symbol="CNDX.AS", kind="etf")
+    scan.plan([etf], 1_000_000, fx)
+    assert etf["tax_huf"] == 0 and "tax" not in cloud.plan_lines(etf, datetime(2026, 10, 27, tzinfo=timezone.utc), 1)[0]

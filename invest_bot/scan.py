@@ -232,21 +232,24 @@ def _fee(value, ccy, fx_rates, symbol=None):
     return max(value * fees.RATE, floor)
 
 
-def size(budget_huf, limit, ccy, fx_rates, symbol=None):
-    """(qty, approx_huf, one_share_huf): whole shares for the budget incl. fee and FX spread."""
+def size(budget_huf, limit, ccy, fx_rates, symbol=None, kind=None):
+    """(qty, approx_huf, one_share_huf): whole shares for the budget incl. fee, buy-side tax (fees.buy_tax) and FX
+    spread."""
     rate = huf_rate(ccy, fx_rates)
     if rate is None or not limit:
         return None, None, None
-    spread = 1 + (rules.FX_SPREAD if ccy != "HUF" else 0)
-    one = (limit + _fee(limit, ccy, fx_rates, symbol)) * rate * spread
+    spread, tax = 1 + (rules.FX_SPREAD if ccy != "HUF" else 0), fees.buy_tax(symbol, kind)
+
+    def total(q):  # in the instrument currency
+        return q * limit * (1 + tax) + _fee(q * limit, ccy, fx_rates, symbol)
+    one = total(1) * rate * spread
     if budget_huf is None:
         return None, None, one
     cap = budget_huf / spread
-    qty = max(0, math.floor(cap / (limit * rate)))
-    while qty > 0 and (qty * limit + _fee(qty * limit, ccy, fx_rates, symbol)) * rate > cap:
+    qty = max(0, math.floor(cap / (limit * (1 + tax) * rate)))
+    while qty > 0 and total(qty) * rate > cap:
         qty -= 1
-    approx = (qty * limit + _fee(qty * limit, ccy, fx_rates, symbol)) * rate if qty else None
-    return qty, approx, one
+    return qty, (total(qty) * rate if qty else None), one
 
 
 def _until(symbol, today, n):
@@ -330,7 +333,7 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
             else:
                 _, limit, _ = rules.dip_rule(ind, rating, last, ccy)
                 until = _until(s, today, rules.DIP_DAYS)
-            qty, approx, one = size(budget, limit, ccy, fx_rates, s)
+            qty, approx, one = size(budget, limit, ccy, fx_rates, s, kind)
             if one is None:
                 tail = "Exchange rate unavailable, so no share count."
             elif qty is None:
@@ -367,9 +370,12 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
 
 
 def cost(i, qty, fx_rates) -> tuple:
-    """(value, fee) in HUF of qty shares at the item's limit, both with the bank's 1% FX spread (rules.FX_SPREAD)."""
+    """(value, fee, buy tax) in HUF of qty shares at the item's limit, all with the bank's 1% FX spread
+    (rules.FX_SPREAD). The tax: fees.buy_tax (FR 0.4%, UK 0.5%, ...; ETFs none)."""
     rate = huf_rate(i["ccy"], fx_rates) * (1 + (rules.FX_SPREAD if i["ccy"] != "HUF" else 0))
-    return qty * i["limit"] * rate, _fee(qty * i["limit"], i["ccy"], fx_rates, i["symbol"]) * rate
+    value = qty * i["limit"] * rate
+    return (value, _fee(qty * i["limit"], i["ccy"], fx_rates, i["symbol"]) * rate,
+            value * fees.buy_tax(i["symbol"], i.get("kind")))
 
 
 def min_qty(i, fx_rates) -> int:
@@ -378,13 +384,13 @@ def min_qty(i, fx_rates) -> int:
 
 
 def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE) -> list:
-    """The BUY PLAN: at most picks_max BUY items to buy now, so that value + fee + FX spread of all of them stays
+    """The BUY PLAN: at most picks_max BUY items to buy now, so that value + fee + buy tax + FX spread of all of them stays
     within cash_huf less a BUFFER for FX drift. Candidates: the BUY items in rank order (after diversify). A pick
     needs its smallest ticket with a fee of at most FEE_MAX (min_qty, at least 1 share) to fit into the cash / picks_max;
     the higher-ranked ones that do not are passed over. When fewer fit, a pick may use the cash the others leave
     (one big pick can take more). Sizing: the cash split equally, floored to whole shares (never below min_qty), then
     the leftover goes 1 share at a time to the highest-ranked pick that still fits. Sets plan=True, qty, value_huf,
-    fee_huf, fee_pct and approx_huf (value + fee) on the picks and returns them (rank order); WAIT_FOR_DIP items are
+    fee_huf, fee_pct, tax_huf and approx_huf (value + fee + tax) on the picks and returns them (rank order); WAIT_FOR_DIP items are
     sized from the cash the plan leaves."""
     budget = max(0.0, cash_huf or 0) * (1 - BUFFER)
     cands = [i for i in items if i["call"] == "BUY" and i.get("limit") and huf_rate(i["ccy"], fx_rates)]
@@ -396,7 +402,7 @@ def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE) -> list:
             picks.append(i)
             left -= need[id(i)]
     picks.sort(key=cands.index)
-    qty = {id(i): max(min_qty(i, fx_rates), size(budget / len(picks), i["limit"], i["ccy"], fx_rates, i["symbol"])[0] or 0)
+    qty = {id(i): max(min_qty(i, fx_rates), size(budget / len(picks), i["limit"], i["ccy"], fx_rates, i["symbol"], i.get("kind"))[0] or 0)
            for i in picks}
 
     def total():
@@ -415,11 +421,13 @@ def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE) -> list:
         else:
             break
     for i in picks:
-        value, fee = cost(i, qty[id(i)], fx_rates)
-        i.update(plan=True, qty=qty[id(i)], value_huf=value, fee_huf=fee, fee_pct=fee / value, approx_huf=value + fee)
+        value, fee, tax = cost(i, qty[id(i)], fx_rates)
+        i.update(plan=True, qty=qty[id(i)], value_huf=value, fee_huf=fee, fee_pct=fee / value, tax_huf=tax,
+                 approx_huf=value + fee + tax)
     for i in items:
         if i["call"] == "WAIT_FOR_DIP" and i.get("limit"):
-            i["qty"], i["approx_huf"], _ = size(budget - spent, i["limit"], i["ccy"], fx_rates, i["symbol"])
+            i["qty"], i["approx_huf"], _ = size(budget - spent, i["limit"], i["ccy"], fx_rates, i["symbol"],
+                                                i.get("kind"))
     return picks
 
 

@@ -41,7 +41,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
-from invest_bot import analysis, fmt, news, prices, scan, state, tax, track, watch
+from invest_bot import analysis, fees, fmt, news, prices, scan, state, tax, track, watch
 from invest_bot.rules import INSTRUMENTS
 
 INDEXES = ("^GSPC", "^STOXX50E")
@@ -182,9 +182,11 @@ def _fit(i) -> str:
 
 
 def plan_lines(i, now, n) -> list:
-    """A BUY PLAN line: 'Buy N× X at ≤ limit ≈ value HUF + fee F HUF (f%)', then score, chips, deadline, flags."""
+    """A BUY PLAN line: 'Buy N× X at ≤ limit ≈ value HUF + fee F HUF (f%)[ + FR tax 0.4% ≈ T HUF]', then score,
+    chips, deadline, flags."""
     out = [f"{fmt.NUMBERS[n - 1]} Buy {i['qty']}× {_label(i)} at ≤ {fmt.price(i['limit'], i['ccy'])} ≈ "
-           f"{_money(i['value_huf'])} + fee {_money(i['fee_huf'])} ({i['fee_pct'] * 100:.2f}%)",
+           f"{_money(i['value_huf'])} + fee {_money(i['fee_huf'])} ({i['fee_pct'] * 100:.2f}%)"
+           + (f" + {fees.tax_label(i['symbol'])} ≈ {_money(i['tax_huf'])}" if i.get("tax_huf") else ""),
            "   " + " · ".join([fmt.scored(i["score"], "/100"), *chips(i),
                                f"⏰ valid till {fmt.day(i['valid_until'], now.date())}"])]
     out += [f"   {fmt.flag(f)}" for f in i.get("flags") or []]

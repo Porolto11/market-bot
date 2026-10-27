@@ -182,3 +182,12 @@ def test_no_switch_away_from_a_holding_without_a_fresh_close():
     assert tax.switches(items, pf(("AMD", 5, 60000)), 20000, RATES, 0)
     items[1]["stale"] = True
     assert tax.switches(items, pf(("AMD", 5, 60000)), 20000, RATES, 0) == []
+
+
+def test_switch_counts_the_buy_side_tax_of_the_pick():
+    pick = dict(item("MC.PA", 90, "BUY", last=200.0, ccy="EUR", one=82000))
+    out = tax.switches([pick, item("AMD", 50, "HOLD", last=150.0)], pf(("AMD", 5, 60000)), 20000, RATES, 0)
+    assert len(out) == 1 and "(incl. FR tax 0.4%)" in out[0][0]
+    m = int(out[0][0].split("buy ")[1].split("×")[0])
+    fees = 3.49 * 350 + (max(m * 200 * 0.0024, 3.49) + m * 200 * 0.004) * 400
+    assert f"fees ≈ {fmt.approx(fees)} HUF" in out[0][0]

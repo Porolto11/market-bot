@@ -96,7 +96,8 @@ def _fifo(lots, qty) -> tuple:
 
 def book(log) -> dict:
     """Replay the log: pos {symbol: {ccy, lots}}, cash (HUF; None until a /cash, /deposit or /withdraw) and
-    realised (the FIFO P/L of each sale in HUF, in order). Costs and proceeds include the fee (deductible), at the
+    realised (the FIFO P/L of each sale in HUF, in order). Costs and proceeds include the fee and a buy's transaction
+    tax (both deductible), at the
     trade's FX; taxed: the same P/L at the official MNB rate of the buy and the sell day (fx_mnb), where recorded,
     else at the trade's FX (approximate)."""
     pos, cash, known, realised, taxed = {}, 0.0, False, [], []
@@ -112,8 +113,9 @@ def book(log) -> dict:
             tfx = e.get("fx_mnb") or fx
             p = pos.setdefault(e["sym"], dict(ccy=e["ccy"], lots=[]))
             if t == "buy":
-                cash -= (value + e["fee"]) * fx
-                p["lots"].append([e["qty"], e["price"], (value + e["fee"]) * fx, (value + e["fee"]) * tfx])
+                paid = value + e["fee"] + e.get("tax", 0.0)  # the buy-side tax (FR 0.4%, ...) is a cost too
+                cash -= paid * fx
+                p["lots"].append([e["qty"], e["price"], paid * fx, paid * tfx])
             else:
                 cash += (value - e["fee"]) * fx
                 cost, tcost = _fifo(p["lots"], e["qty"])

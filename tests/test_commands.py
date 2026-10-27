@@ -281,3 +281,16 @@ def test_permanent_send_errors_are_dropped_not_kept_in_the_outbox(tmp_path):
     st = state.load(str(tmp_path / "state.enc"), TOKEN)
     assert code == 1 and st["outbox"] == [] and len(st["log"]) == 1 and "(permanent: dropped)" in out.getvalue()
     assert (tmp_path / "outbox_pending").read_text() == "0"  # the precheck will not rerun for it
+
+
+def test_bought_adds_the_buy_side_tax_to_cash_and_the_fifo_cost():
+    st = state.empty()
+    say(st, "/cash 1000000")
+    r = say(st, "/bought MC.PA 10 500")  # LVMH, Paris: 5 000 EUR, fee 12 EUR, FR tax 0.4% = 20 EUR
+    assert "fee 12.00 EUR + FR tax 0.4% 20.00 EUR" in r and st["log"][-1]["tax"] == 20.0
+    b = state.book(st["log"])
+    assert b["pos"]["MC.PA"]["lots"][0][2] == pytest.approx(5032 * 400)  # the tax is part of the cost basis
+    r = say(st, "/sold MC.PA 10 500")  # selling at the same price realises the fees and the tax as a loss
+    assert st["log"][-1]["pl_huf"] == round((5000 - 12) * 400 - 5032 * 400)
+    say(st, "/bought CSPX 1 600")  # an ETF: no tax
+    assert "tax" not in st["log"][-1]
