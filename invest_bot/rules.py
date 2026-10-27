@@ -8,7 +8,7 @@ SLIP = 0.002  # buy limit = last x 1.002, sell limit = last x 0.998
 MIN_MOVE = 0.03  # smallest expected one-month move / dip depth
 DIP_DAYS = 10  # trading days a wait_for_dip stays open
 RSI_HOT = 70
-FX_SPREAD = 0.003  # estimate per round trip for non-HUF instruments
+FX_SPREAD = 0.01  # K&H converts at 1% on top of the market rate (docs/KH.md), on the converted amount only
 
 # bot ticker -> (ISIN, currency)
 INSTRUMENTS = {

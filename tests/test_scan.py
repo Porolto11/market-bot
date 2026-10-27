@@ -130,8 +130,8 @@ def test_whole_share_sizing_and_share_over_budget():
 
 def test_sizing_huf_and_pence():
     assert scan.size(100_000, 3000.0, "HUF", FX)[0] == 33  # 33 x 3000 + 349 fee <= 100 000
-    qty, approx, one = scan.size(100_000, 500.0, "GBp", FX)  # 5 GBP a share; 43 would go over with fee and FX spread
-    assert qty == 42 and approx <= 100_000 and one == pytest.approx(5 * 460 * 1.003 + 3.49 * 400 * 1.003, rel=0.01)
+    qty, approx, one = scan.size(100_000, 500.0, "GBp", FX)  # 5 GBP a share; 43 would go over with fee and 1% FX
+    assert qty == 42 and approx <= 100_000 and one == pytest.approx((5 * 460 + 3.49 * 400) * 1.01)
     assert scan.size(100_000, 10.0, "CHF", FX) == (None, None, None)
 
 

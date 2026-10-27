@@ -20,7 +20,8 @@ def test_dip_deadline_from_weekend_lands_on_session():
 
 
 def test_buy_qty_keeps_the_fx_spread_aside_for_non_huf():
-    assert rules.buy_qty(1_000_000, 1_000_000, 50, 100, "USD") == 198
+    assert rules.FX_SPREAD == 0.01  # K&H: 1% on top of the market rate (docs/KH.md)
+    assert rules.buy_qty(1_000_000, 1_000_000, 50, 100, "USD") == 197  # 198 x 50 USD + fee x 1.01 > 1 000 000
     assert rules.buy_qty(1_000_000, 1_000_000, 50, 1, "HUF") == 19_952
 
 

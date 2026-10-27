@@ -7,7 +7,7 @@ has any; else env PORTFOLIO_JSON (Actions secret, or a local --portfolio file fo
 --budget-huf (env CLOUD_BUDGET_HUF, default 200 000 HUF). The BUY calls are spread out first (scan.diversify): at
 most 2 per Yahoo sector (ETFs are one sector) and none whose 6-month daily returns correlate more than 0.75 with a
 higher pick; the skipped ones are listed with the reason. The cash then buys a BUY PLAN (scan.plan): the top 3
-picks it can actually buy, in whole shares, value + fee + FX spread within the cash less 1%, no fee over 1%; the
+picks it can actually buy, in whole shares, value + fee + the 1% FX spread within the cash less 1%, no fee over 1%; the
 other BUYs are a watchlist. Without holdings it gives
 market calls only (no SELL calls). Holdings and cash are never printed. The scan ranking (for /top and /scan) and
 the sent calls go into the state (with the call log that /stats scores, see track.py), which is saved only when

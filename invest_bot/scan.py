@@ -366,7 +366,7 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
 
 
 def cost(i, qty, fx_rates) -> tuple:
-    """(value, fee) in HUF of qty shares at the item's limit, both with the bank's FX spread."""
+    """(value, fee) in HUF of qty shares at the item's limit, both with the bank's 1% FX spread (rules.FX_SPREAD)."""
     rate = huf_rate(i["ccy"], fx_rates) * (1 + (rules.FX_SPREAD if i["ccy"] != "HUF" else 0))
     return qty * i["limit"] * rate, _fee(qty * i["limit"], i["ccy"], fx_rates) * rate
 

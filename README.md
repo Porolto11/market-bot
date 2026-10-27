@@ -26,8 +26,8 @@ symbol without a close for its exchange's last completed session gets no BUY or 
 shares fit your budget. The BUY section is a BUY PLAN: the top 3 picks your cash (or the budget) can actually buy,
 e.g. "Buy 3× Micron (MU) at ≤ $905.5 ≈ 897 000 HUF + fee 2 150 HUF (0.24%)", and a total line. A pick needs its
 smallest ticket with a K&H fee of at most 1% to fit into a third of the cash (when fewer fit, one may use the rest);
-the cash is split equally in whole shares and the leftover goes to the highest-ranked pick. Value + fee + FX spread
-always stay within the cash less a 1% buffer. The other BUY calls are a watchlist (names and scores). The picks are spread out:
+the cash is split equally in whole shares and the leftover goes to the highest-ranked pick. Value + fee + K&H's 1% FX
+conversion spread always stay within the cash less a 1% buffer. The other BUY calls are a watchlist (names and scores). The picks are spread out:
 at most 2 per sector (Yahoo's sector; ETFs count as one) and none whose 6-month daily returns correlate more than
 0.75 with a higher pick ("skipped: too similar to MU"). The Monday morning scan also sends a short weekly
 summary: portfolio value in HUF and its change since the last summary (deposits and withdrawals left out), the
