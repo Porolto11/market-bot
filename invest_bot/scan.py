@@ -7,6 +7,7 @@ figures.
 """
 import json
 import math
+import os
 from datetime import date, datetime, timezone
 
 import numpy as np
@@ -57,7 +58,9 @@ UNIVERSE = {
 CALLS = ("BUY", "WAIT_FOR_DIP", "WAIT", "HOLD", "SELL", "AVOID")  # WAIT: a BUY held back by earnings or news
 ACTIONABLE = ("BUY", "WAIT_FOR_DIP", "SELL")
 BUY_SCORE = 70
-RSI_HOT = 70
+# RSI above this turns a BUY into WAIT_FOR_DIP. Off by default: the wait cost ~9 pts/yr in both test periods
+# (docs/EXPERIMENTS.md). Rollback: env RSI_HOT=70.
+RSI_HOT = float(os.environ["RSI_HOT"]) if os.environ.get("RSI_HOT") else None
 MIN_ANALYSTS = 5
 UPSIDE_CAP = 0.30  # +30% analyst upside or more earns the full 20 points
 EARNINGS_DAYS = 7  # flag
@@ -195,7 +198,7 @@ def potential(ind, fund, universe_moms, today: date | None = None):
         flags.append("very volatile")
     if ind.get("dd_52w") is not None and ind["dd_52w"] < -0.30:
         flags.append("far below 52w high")
-    if ind.get("rsi14") is not None and ind["rsi14"] > 75:
+    if RSI_HOT is not None and ind.get("rsi14") is not None and ind["rsi14"] > 75:
         flags.append("overheated")
     return score, dict(parts, upside_pct=upside_pct), flags
 
@@ -287,7 +290,7 @@ def _call(held, rating, score, rsi):
         return "SELL" if rating == "bearish" else "HOLD"
     if rating == "bearish":
         return "AVOID"
-    if score >= BUY_SCORE and rsi is not None and rsi > RSI_HOT:
+    if RSI_HOT is not None and score >= BUY_SCORE and rsi is not None and rsi > RSI_HOT:
         return "WAIT_FOR_DIP"
     if score >= BUY_SCORE and rating == "bullish":
         return "BUY"

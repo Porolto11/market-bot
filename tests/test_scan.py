@@ -93,6 +93,20 @@ def test_parse_info_missing_fields():
     assert f["earnings_date"] == "2026-10-31" and f["target_mean"] is None
 
 
+def test_no_rsi_wait_by_default(monkeypatch):
+    """docs/EXPERIMENTS.md: waiting on RSI > 70 cost ~9 pts/yr, so a hot top stock is a plain BUY unless RSI_HOT."""
+    monkeypatch.setattr(scan, "RSI_HOT", None)
+    hot = hist(hot_tail=20)
+    hs = universe({"HOT": hot})
+    items = scan.run_scan(hs, {"HOT": strong_fund(scan.features(hot)["last"])}, NOW, 1_000_000, {}, FX)
+    h = item(items, "HOT")
+    assert scan.features(hot)["rsi14"] > 75 and h["score"] >= 70
+    assert h["call"] == "BUY" and "overheated" not in h["flags"] and "Buy at up to" in h["reason"]
+    monkeypatch.setattr(scan, "RSI_HOT", 70.0)  # the rollback brings the wait back
+    assert item(scan.run_scan(hs, {"HOT": strong_fund(scan.features(hot)["last"])}, NOW, 1_000_000, {}, FX),
+                "HOT")["call"] == "WAIT_FOR_DIP"
+
+
 def test_call_rules_each_branch():
     good, bear, hot = hist(), hist(up=0.985, down=1.01), hist(hot_tail=20)
     hs = universe({"GOOD": good, "BEAR": bear, "HOT": hot, "HELD": good, "HELDBEAR": bear, "MEH": weak()})

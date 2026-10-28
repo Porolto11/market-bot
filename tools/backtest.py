@@ -74,7 +74,8 @@ def signal(c, i, how, n=5):
     return list(sc.dropna().sort_values(ascending=False).index[:n])
 
 
-def run(px, univ, how, cap=3000.0, start="2014-01-01", end=None, slip=0.001, stop=None):
+def run(px, univ, how, cap=3000.0, start="2014-01-01", end=None, slip=0.001, stop=None, exit=None):
+    """exit: optional daily rule exit(closes up to today, symbol) -> True to sell at today's close."""
     c, idx = px[univ], px.index
     rebal = {i for i in range(1, len(idx)) if idx[i].month != idx[i - 1].month and idx[i] >= pd.Timestamp(start)
              and (end is None or idx[i] <= pd.Timestamp(end))}
@@ -97,6 +98,9 @@ def run(px, univ, how, cap=3000.0, start="2014-01-01", end=None, slip=0.001, sto
         price = c.iloc[i]
         if stop:
             for s in [s for s, (sh, cost) in pos.items() if price[s] * sh <= cost * (1 - stop)]:
+                sell(s, i)
+        if exit:
+            for s in [s for s in pos if exit(c[s].iloc[:i + 1].dropna(), s)]:
                 sell(s, i)
         if i not in rebal:
             continue
