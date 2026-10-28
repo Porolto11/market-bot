@@ -289,3 +289,21 @@ def test_at_most_two_picks_per_sector_and_etfs_count_as_one_sector():
     assert sum(i["call"] == "BUY" for i in items) == 4 and not any(i.get("skipped") for i in items)
     ind = scan.run_scan({"CSPX.L": hist()}, {}, NOW, None, {}, FX)[0]
     assert ind["sector"] == "ETF" and scan.parse_info({"sector": "Technology"})["sector"] == "Technology"
+
+
+def test_core_plan_tops_the_world_etf_up_to_the_share():
+    vwce = dict(symbol="VWCE.DE", name="Vanguard FTSE All-World", kind="etf", ccy="EUR", last=172.0, score=50,
+                call=None)
+    mu = dict(symbol="MU", kind="stock", ccy="USD", last=930.0, score=99, call="HOLD")
+    items = [mu, vwce]
+    core, left = scan.core_plan(items, {"MU": 1}, 1_000_000, FX, TODAY)  # 1 MU ≈ 325 500 HUF + 1 000 000 cash
+    gap = 0.5 * (930 * FX["USD"] + 1_000_000)
+    assert core is vwce and core["core"] and core["plan"] and core["call"] == "BUY" and core["qty"] >= 8
+    assert gap * 0.9 <= core["approx_huf"] <= gap * 1.02  # about half of everything, fees and conversion in
+    assert left["HUF"] == pytest.approx(1_000_000 - core["approx_huf"])
+    assert all(i is not vwce for i in scan.plan(items, 1_000_000, FX))  # the picks never take the core again
+    assert scan.core_plan(items, {"MU": 1, "VWCE.DE": 20}, 1_000_000, FX, TODAY)[0] is None  # 1.38M of 2.7M: over 50%
+    for i in items:
+        i.pop("core", None)
+    assert scan.core_plan(items, {}, 1_000_000, FX, TODAY, share=0)[0] is None  # /core 0
+    assert scan.core_plan(items, {}, 100_000, FX, TODAY)[0] is None  # 50 000 HUF: under 3 shares, fee over 1%

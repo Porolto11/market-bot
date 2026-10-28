@@ -71,6 +71,18 @@ def test_scan_message_layout():
     assert six == ["📈 +50% in 6 months"]
 
 
+def test_core_line_comes_first_and_the_picks_are_numbered_from_1():
+    core = item("VWCE.DE", "BUY", 50, qty=9, name="Vanguard FTSE All-World", kind="etf", ccy="EUR", limit=172.34,
+                plan=True, core=True, core_share=0.5, value_huf=620000.0, fee_huf=1500.0, fee_pct=1500 / 620000)
+    pick = item("ANET", "BUY", 80, qty=2, plan=True, value_huf=119000.0, fee_huf=800.0, fee_pct=800 / 119000)
+    text = cloud.message([pick, core], REGIME, TUE, None, 1_000_000, has_cash=True)
+    assert ("🟢 BUY PLAN\n🧱 Core: Buy 9× Vanguard FTSE All-World (VWCE) at ≤ €172.34 ≈ 620 000 HUF + fee 1 500 HUF"
+            in text)
+    assert "   🎯 brings your world ETF to ~50% of your money (/core to change) · hold it long-term" in text
+    assert "\n1️⃣ Buy 2× ANET" in text and "2️⃣" not in text
+    assert "Why: a world-ETF base (🧱) plus the top-ranked picks" in text
+
+
 def test_todays_move_priority():
     buy, fits = item("MU", "BUY", 99, qty=0, one=302493.0, name="Micron"), item("ANET", "BUY", 80, qty=1, plan=True,
                                                                               value_huf=59000.0, fee_huf=1000.0, fee_pct=0.017)

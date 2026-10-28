@@ -146,6 +146,28 @@ Test: SPY, $3000, K&H fees, 15% tax at each sale. Variants so far: 38.
 
 **Shipped:** the core ETFs (scan.CORE) get HOLD instead of a trend SELL. The dip alerts and the 20% stop stay.
 
+## 2026-10-28, cycle 10: a core ETF plus the live picks
+
+Method:
+- Core = SPY (buy and hold); picks = the live model (hold until bearish, 20% stop), S&P100;
+- yearly rebalance, monthly values, before the final tax.
+
+**Pre-registered rule:** the split with the best CAGR / |max drawdown| in both periods. Variants so far: 43.
+
+| Core share | 2014-19 | 2020- |
+|---|---|---|
+| 0% | +18.8 / -36 (ratio 0.52) | +36.9 / -31 (1.18, best) |
+| 30% | +17.0 / -30 (0.56) | +31.3 / -28 (1.14) |
+| 50% | +15.6 / -26 (0.60) | +27.2 / -25 (1.08) |
+| 70% | +14.1 / -21 (0.67) | +22.8 / -24 (0.96) |
+| 100% | +11.7 / -14 (0.85, best) | +15.3 / -24 (0.65) |
+
+**No split wins in both periods,** so the split is a risk preference, not an optimum.
+
+**Shipped:**
+- the core as a user setting, `/core N`;
+- default 50%, which is never the worst ratio here: it keeps most of the return and cuts the worst drop to about −25%.
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.

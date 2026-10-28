@@ -302,3 +302,10 @@ def test_bought_adds_the_buy_side_tax_to_cash_and_the_fifo_cost():
     assert st["log"][-1]["pl_huf"] == round((5000 - 12) * 400 - 5032 * 400)
     say(st, "/bought CSPX 1 600")  # an ETF: no tax
     assert "tax" not in st["log"][-1]
+
+
+def test_core_command_sets_the_share():
+    st = state.empty()
+    assert say(st, "/core 70").startswith("🧱 Core target 70%") and st["core_share"] == 0.7
+    assert say(st, "/core 0") == "🧱 Core off: the buy plan is momentum picks only." and st["core_share"] == 0
+    assert say(st, "/core 150").startswith("Usage: /core") and st["core_share"] == 0

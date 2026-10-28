@@ -120,7 +120,7 @@ def run(px, univ, how, cap=3000.0, start="2014-01-01", end=None, slip=0.001, sto
     after = v.iloc[-1] - TAX * max(0, gains.get(v.index[-1].year, 0) + open_gain)
     yrs = (v.index[-1] - v.index[0]).days / 365.25
     return dict(cagr=(v.iloc[-1] / cap) ** (1 / yrs) - 1, cagr_at=(after / cap) ** (1 / yrs) - 1,
-                mdd=(v / v.cummax() - 1).min(), trades=trades, fee_pct=fees / cap)
+                mdd=(v / v.cummax() - 1).min(), trades=trades, fee_pct=fees / cap, series=v)
 
 
 def bench(px, start="2014-01-01", end=None):

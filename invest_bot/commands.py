@@ -38,6 +38,7 @@ HELP = """🤖 Invest Bot commands
 🏆 /top — top 10 of the last scan
 🔄 /refresh — run a fresh full scan now (the message with your buy plan, about 2 minutes)
 🔍 /scan SYM — live analysis of one symbol
+🧱 /core PERCENT — your world-ETF (VWCE) share target, 0-100 (default 50; 0 turns it off)
 📊 /stats — how past calls did vs CSPX
 🧾 /tax — realised P/L, estimated 15% tax (MNB rates)
 
@@ -46,9 +47,9 @@ SYM: a bot ticker (MOL, CSPX, SAP, OTP) or a Yahoo symbol (MOL.BD, NVDA, SAP.DE)
 RESET = "State was reset (it could not be decrypted, e.g. the bot token changed): please re-enter holdings and cash."
 DELAYED = "(delayed reply) "
 USAGE = {"bought": "/bought SYM QTY PRICE", "sold": "/sold SYM QTY PRICE", "deposit": "/deposit AMOUNT [HUF|USD|EUR]",
-         "withdraw": "/withdraw AMOUNT [HUF|USD|EUR]", "cash": "/cash AMOUNT [HUF|USD|EUR]", "scan": "/scan SYM"}
+         "withdraw": "/withdraw AMOUNT [HUF|USD|EUR]", "cash": "/cash AMOUNT [HUF|USD|EUR]", "scan": "/scan SYM", "core": "/core PERCENT (0-100)"}
 MONEY = ("deposit", "withdraw", "cash")  # AMOUNT and an optional currency (default HUF)
-ARGS = {"bought": 3, "sold": 3, "deposit": 1, "withdraw": 1, "cash": 1, "scan": 1,
+ARGS = {"bought": 3, "sold": 3, "deposit": 1, "withdraw": 1, "cash": 1, "scan": 1, "core": 1,
         "holdings": 0, "top": 0, "refresh": 0, "stats": 0, "tax": 0, "undo": 0, "help": 0, "start": 0}
 CALL = {"BUY": "🟢 BUY", "WAIT": "⏳ WAIT", "WAIT_FOR_DIP": "🪤 WAIT FOR DIP", "HOLD": "✋ HOLD", "SELL": "🔴 SELL",
         "AVOID": "⛔ AVOID"}
@@ -344,6 +345,16 @@ def handle(st, text, now, download_fn=prices.download, info_fn=prices.info, mnb_
         return holdings(st, now, download_fn)
     if cmd == "top":
         return top(st)
+    if cmd == "core":
+        try:
+            pct = float(args[0].rstrip("%").replace(",", "."))
+        except ValueError:
+            pct = -1
+        if not 0 <= pct <= 100:
+            return "Usage: /core PERCENT (0-100), e.g. /core 50"
+        st["core_share"] = pct / 100
+        return (f"🧱 Core target {pct:g}%: the buy plan tops VWCE up to {pct:g}% of your money, the picks get the rest."
+                if pct else "🧱 Core off: the buy plan is momentum picks only.")
     if cmd == "refresh":
         try:
             ago = now - datetime.fromisoformat((st.get("scan") or {}).get("at") or "")

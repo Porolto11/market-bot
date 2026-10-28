@@ -187,6 +187,15 @@ def _fit(i) -> str:
     return f"✅ {'Buy ' if i['call'] == 'BUY' else ''}{qty}× ≈ {_money(i['approx_huf'])}"
 
 
+def _numbered(buys) -> list:
+    """[(n, item)]: the picks numbered 1.. (the core is not numbered, it shows as 🧱)."""
+    out, n = [], 0
+    for i in buys:
+        n += 0 if i.get("core") else 1
+        out.append((max(n, 1), i))
+    return out
+
+
 def plan_lines(i, now, n) -> list:
     """A BUY PLAN line: 'Buy N× X at ≤ limit ≈ value HUF + fee F HUF (f%)[ + FR tax 0.4% ≈ T HUF]', then score,
     chips, deadline, flags. 🆕 marks a pick the last sent message did not have (i['new'], set in run)."""
@@ -197,6 +206,11 @@ def plan_lines(i, now, n) -> list:
                                f"⏰ valid till {fmt.day(i['valid_until'], now.date())}"])]
     if pay := paid_line(i):
         out.insert(1, f"   {pay}")
+    if i.get("core"):  # scan.core_plan: the long-term base, no trend exit
+        out[0] = out[0].replace(f"{fmt.NUMBERS[n - 1]} ", "🧱 Core: ", 1)
+        out[-1] = (f"   🎯 brings your world ETF to ~{i['core_share']:.0%} of your money (/core to change) · hold it "
+                   f"long-term, add on 🛒 dips · ⏰ valid till {fmt.day(i['valid_until'], now.date())}")
+        return out
     # the live exits (docs/EXPERIMENTS.md): hold while the trend is up, SELL when it turns bearish, the hard stop
     out.append(f"   🛑 exit plan: hold while the trend is up · SELL call when it turns bearish, or below "
                f"{fmt.price(round(i['limit'] * (1 - watch.HARD_STOP), 2), i['ccy'])} (−{watch.HARD_STOP:.0%})")
@@ -251,7 +265,8 @@ def todays_move(buys, sells, stops, switches, watch=()) -> str:
     if buys:
         return ("🟢 Buy the plan: " + ", ".join(f"{i['qty']}× {fmt.tick(i['symbol'])}" for i in buys)
                 + f" ≈ {_money(sum(i['approx_huf'] for i in buys))}\n"
-                "Why: the top-ranked picks your cash can buy, fees included.")
+                + ("Why: a world-ETF base (🧱) plus the top-ranked picks your cash can buy, fees included."
+                   if any(i.get("core") for i in buys) else "Why: the top-ranked picks your cash can buy, fees included."))
     if watch:
         top = watch[0]
         need = f" needs ≈ {_money(top['one_share_huf'])}" if top.get("one_share_huf") else " has no share count"
@@ -307,7 +322,7 @@ def message(items, regime, now, portfolio, cash_huf, has_cash=False, rates=None,
     if buys or watch:
         total = sum(i["approx_huf"] for i in buys)
         parts.append("\n".join(
-            [*(["🟢 BUY PLAN"] + [line for n, i in enumerate(buys, 1) for line in plan_lines(i, now, n)]
+            [*(["🟢 BUY PLAN"] + [line for n, i in _numbered(buys) for line in plan_lines(i, now, n)]
                + [f"🧮 Total ≈ {_money(total)} of your {_money(cash_huf)} · left ≈ {_money(cash_huf - total)}"]
                + ([CONCENTRATED] if sum(i.get("kind") != "etf" for i in buys) >= 2 else [])
                if buys else [f"🟢 BUY: nothing fits {'your cash' if known else 'the budget'} "
@@ -350,7 +365,7 @@ def _wait_why(i) -> str:
 
 def shown(items) -> tuple:
     """(the BUY PLAN picks, the watchlist: the other BUY calls), together at most MAX_BUYS."""
-    picks = [i for i in items if i.get("plan") and i["call"] == "BUY"]
+    picks = sorted([i for i in items if i.get("plan") and i["call"] == "BUY"], key=lambda i: not i.get("core"))
     return picks, [i for i in items if i["call"] == "BUY" and not i.get("plan")][:MAX_BUYS - len(picks)]
 
 
@@ -523,7 +538,15 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
     print(f"news for {len(headlines)} symbols in {time.monotonic() - started:.1f}s; {len(fresh)} new alert(s)",
           file=out)
     news.apply(items, headlines, now)
+    core = None
+    if mine:  # your own holdings and cash: top the world ETF up to the /core share first, the picks get the rest
+        core, left = scan.core_plan(items, holdings, cash, rates, now.date(), wallet,
+                                    st.get("core_share", scan.CORE_SHARE))
+        if core:
+            wallet, cash = left, cash - core["approx_huf"]
     scan.plan_spread(items, scanned, cash, rates, wallet=wallet)
+    if core:
+        cash += core["approx_huf"]  # the message shows the total cash
     if st["sent"]:  # 🆕 on the picks the last sent message did not have
         for i in items:
             i["new"] = [i["symbol"], i["call"]] not in st["sent"][-1]["calls"]

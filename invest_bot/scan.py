@@ -443,7 +443,7 @@ def plan(items, cash_huf, fx_rates, picks_max=PLAN_SIZE, wallet=None) -> list:
         wallet = {"HUF": cash_huf or 0}
     wallet = {c: max(0.0, v) * (1 - BUFFER) for c, v in wallet.items()}
     budget = state.total_huf(wallet, fx_rates)
-    cands = [i for i in items if i["call"] == "BUY" and i.get("limit") and huf_rate(i["ccy"], fx_rates)
+    cands = [i for i in items if i["call"] == "BUY" and not i.get("core") and i.get("limit") and huf_rate(i["ccy"], fx_rates)
              and huf_rate(state.wallet_ccy(i["ccy"])[0], fx_rates)]
 
     def alone(i):
@@ -528,12 +528,47 @@ def _clash(i, kept, histories):
     return None
 
 
+CORE_ETF = "VWCE.DE"  # the world ETF the core is topped up with
+BROAD = ("VWCE.DE", "IWDA.AS", "CSPX.L")  # holdings that count as the core
+CORE_SHARE = 0.5  # default target: no split won in both test periods, 50% never had the worst ratio (EXPERIMENTS)
+
+
+def core_plan(items, holdings, cash_huf, fx_rates, today, wallet=None, share=CORE_SHARE):
+    """(the CORE_ETF item sized to top the broad ETFs up to `share` of holdings + cash, or None; the wallet left for
+    the picks). Whole shares, a fee of at most FEE_MAX, paid like a pick (pay). Sets core=True, plan=True, call BUY."""
+    wallet = dict(wallet or {"HUF": cash_huf or 0})
+    by = {i["symbol"]: i for i in items}
+    i = by.get(CORE_ETF)
+    if not share or not cash_huf or not i or i.get("stale"):
+        return None, wallet
+
+    def value(s, q):
+        j = by.get(s)
+        return q * j["last"] * (huf_rate(j["ccy"], fx_rates) or 0) if j else 0.0
+    have = sum(value(s, q) for s, q in holdings.items() if s in BROAD)
+    gap = share * (sum(value(s, q) for s, q in holdings.items()) + cash_huf) - have
+    i["limit"] = rules._tick(i["last"] * (1 + rules.SLIP), i["ccy"])
+    qty = size(min(gap, cash_huf * (1 - BUFFER)), i["limit"], i["ccy"], fx_rates, CORE_ETF, "etf")[0] or 0
+    while qty >= min_qty(i, fx_rates) and not _fits(pay([i], {id(i): qty}, wallet, fx_rates)[1]):
+        qty -= 1
+    if qty < min_qty(i, fx_rates):
+        return None, wallet
+    paid, left, _ = pay([i], {id(i): qty}, wallet, fx_rates)
+    value_huf, fee, tax = cost(i, qty, fx_rates, spread=False)
+    own, conv, fx_cost = paid[id(i)]
+    i.update(core=True, plan=True, call="BUY", qty=qty, value_huf=value_huf, fee_huf=fee, fee_pct=fee / value_huf,
+             tax_huf=tax, wallet_ccy=state.wallet_ccy(i["ccy"])[0], own=own, convert_huf=conv, fx_cost_huf=fx_cost,
+             approx_huf=value_huf + fee + tax + fx_cost, valid_until=_until(CORE_ETF, today, 1), core_share=share)
+    return i, left
+
+
 def plan_spread(items, histories, cash_huf, fx_rates, wallet=None) -> list:
     """The BUY PLAN with diversify's rules applied to the picks themselves: a pick that clashes with a higher pick is
     skipped and the plan re-run. A BUY the cash cannot buy (watchlist) never uses up a sector slot."""
     while True:
         for i in items:
-            i.pop("plan", None)
+            if not i.get("core"):
+                i.pop("plan", None)
         picks = plan(items, cash_huf, fx_rates, wallet=wallet)
         bad = next((i for n, i in enumerate(picks) if _clash(i, picks[:n], histories)), None)
         if bad is None:
