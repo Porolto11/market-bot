@@ -56,8 +56,8 @@ class Fake:
     def send(self, token, chat, text):
         self.sent.append(text)
 
-    def scan(self, path):
-        self.scans.append(self.t)
+    def scan(self, path, force=False):
+        self.scans.append(("forced", self.t) if force else self.t)
         self.t += timedelta(minutes=3)
         return 0
 
@@ -182,6 +182,22 @@ def test_due_slot_is_done_when_marked_or_a_scan_ran_after_it():
     assert listen.due_slot(dict(scan_slot=t.isoformat()), t + timedelta(hours=1)) is None
     assert listen.due_slot(dict(scan=dict(at="2026-10-27T06:52:10+00:00")), t + timedelta(hours=1)) is None
     assert listen.due_slot(dict(scan=dict(at="2026-10-26T21:15:10+00:00")), t + timedelta(hours=1)) == t
+
+
+def test_refresh_runs_one_forced_scan_right_after_the_reply(tmp_path):
+    noon = at(2026, 10, 27, 12, 0)
+    fake = Fake(noon, [(noon, msg(1, "/refresh"))])
+    run(tmp_path, fake, minutes=30)
+    assert fake.sent == ["🔄 Scanning now: the full message with your buy plan arrives in about 2 minutes."]
+    assert fake.scans == [("forced", noon)]  # once, not a slot scan, and no slot is marked
+    st = load(tmp_path)
+    assert "scan_now" not in st and "scan_slot" not in st
+    st["scan"] = dict(at=(noon + timedelta(minutes=5)).isoformat(), items=[], moms={})  # a scan 3 min before the next
+    state.save(st, str(tmp_path / "state.enc"), TOKEN)
+    later = noon + timedelta(minutes=8)
+    again = Fake(later, [(later, msg(2, "/refresh"))])
+    run(tmp_path, again, minutes=30)
+    assert again.scans == [] and again.sent[0].startswith("⏳ A scan ran 3 min ago")
 
 
 def test_scan_runs_once_per_slot_and_a_restart_does_not_repeat_it(tmp_path):

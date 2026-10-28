@@ -17,12 +17,13 @@ import re
 import sys
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from invest_bot import cloud, fees, fmt, mnb, precheck, prices, rules, scan, state, tax, track
 
 UPDATES = "https://api.telegram.org/bot{token}/getUpdates?{query}"
 TOP = 10
+SCAN_EVERY = timedelta(minutes=10)  # /refresh at most this often
 HELP = """🤖 Invest Bot commands
 
 📝 Record
@@ -35,6 +36,7 @@ HELP = """🤖 Invest Bot commands
 🔎 Look
 💼 /holdings — positions, P/L, total in HUF
 🏆 /top — top 10 of the last scan
+🔄 /refresh — run a fresh full scan now (the message with your buy plan, about 2 minutes)
 🔍 /scan SYM — live analysis of one symbol
 📊 /stats — how past calls did vs CSPX
 🧾 /tax — realised P/L, estimated 15% tax (MNB rates)
@@ -47,7 +49,7 @@ USAGE = {"bought": "/bought SYM QTY PRICE", "sold": "/sold SYM QTY PRICE", "depo
          "withdraw": "/withdraw AMOUNT [HUF|USD|EUR]", "cash": "/cash AMOUNT [HUF|USD|EUR]", "scan": "/scan SYM"}
 MONEY = ("deposit", "withdraw", "cash")  # AMOUNT and an optional currency (default HUF)
 ARGS = {"bought": 3, "sold": 3, "deposit": 1, "withdraw": 1, "cash": 1, "scan": 1,
-        "holdings": 0, "top": 0, "stats": 0, "tax": 0, "undo": 0, "help": 0, "start": 0}
+        "holdings": 0, "top": 0, "refresh": 0, "stats": 0, "tax": 0, "undo": 0, "help": 0, "start": 0}
 CALL = {"BUY": "🟢 BUY", "WAIT": "⏳ WAIT", "WAIT_FOR_DIP": "🪤 WAIT FOR DIP", "HOLD": "✋ HOLD", "SELL": "🔴 SELL",
         "AVOID": "⛔ AVOID"}
 THOUSANDS = re.compile(r"[.,]\d{3}(?!\d)")  # 120.000 or 1,500: a thousands separator, or a decimal?
@@ -342,6 +344,15 @@ def handle(st, text, now, download_fn=prices.download, info_fn=prices.info, mnb_
         return holdings(st, now, download_fn)
     if cmd == "top":
         return top(st)
+    if cmd == "refresh":
+        try:
+            ago = now - datetime.fromisoformat((st.get("scan") or {}).get("at") or "")
+        except ValueError:
+            ago = None
+        if ago is not None and ago < SCAN_EVERY:
+            return f"⏳ A scan ran {int(ago.total_seconds() // 60)} min ago: /top shows it. Try again in a few minutes."
+        st["scan_now"] = True  # listen.py runs it after this reply
+        return "🔄 Scanning now: the full message with your buy plan arrives in about 2 minutes."
     if cmd == "stats":
         return track.stats(st)
     if cmd == "tax":

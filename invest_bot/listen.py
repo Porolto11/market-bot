@@ -173,8 +173,8 @@ def another_run(env, opener=urllib.request.urlopen, out=None) -> bool:
     return any(str(r.get("id")) != own and r.get("status") in ACTIVE for r in runs)
 
 
-def _scan(path) -> int:
-    return cloud.run(cloud.parse_args(["--state", path]))
+def _scan(path, force=False) -> int:
+    return cloud.run(cloud.parse_args(["--state", path, *(["--force"] if force else [])]))
 
 
 def _no_offset(dump) -> str:
@@ -227,19 +227,23 @@ def listen(path, token, chat, minutes, push_fn=None, now_fn=lambda: datetime.now
         return True
 
     def scan(slot):
+        """A slot scan, or slot None: an on-demand /scan (forced, so it is sent even with unchanged calls)."""
         nonlocal st, scans
+        st.pop("scan_now", None)
         save()  # the scan reads the file
         try:
-            code = scan_fn(path)
+            code = scan_fn(path) if slot else scan_fn(path, force=True)
         except Exception as e:
             code = f"error {type(e).__name__}"
         try:
             st = state.load(path, token)
         except Exception as e:
             log(f"state reload after the scan failed ({type(e).__name__})", out)
-        st["scan_slot"] = slot.isoformat()
+        if slot:
+            st["scan_slot"] = slot.isoformat()
         scans += 1
-        log(f"scan for the {slot:%H:%M} UTC slot done ({code})", out)
+        log(f"scan {'for the ' + format(slot, '%H:%M') + ' UTC slot' if slot else 'on request (/scan)'} done ({code})",
+            out)
 
     backoff = BACKOFF[0]
     log(f"listening for {minutes:g} min", out)
@@ -249,6 +253,8 @@ def listen(path, token, chat, minutes, push_fn=None, now_fn=lambda: datetime.now
                 slot = due_slot(st, now)
                 if slot and end - now > SCAN_ROOM:
                     scan(slot)
+                elif st.get("scan_now") and end - now > SCAN_ROOM:
+                    scan(None)
                 else:
                     timeout = max(0, min(POLL, int((end - STOP - now).total_seconds())))
                     handled, _ = commands.step(st, token, chat, now, folder,
