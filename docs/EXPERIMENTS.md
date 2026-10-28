@@ -89,6 +89,29 @@ free slots). This is the live behaviour, so it is the baseline that decides.
 | the same without the trailing alert | **+17.8 / -36** | **+41.8 / -36** | 75 | **PASS → shipped** |
 | hold while in the top 10 (monthly) instead | +23.7 / -28 | +31.5 / -34 | 189 | fail (2020-: lower CAGR); much better in 2014-19 and on bot US: re-test later |
 
+## 2026-10-28, cycle 3: how holdings are kept (baseline = live after 3a1d9f7)
+
+The baseline model was checked against the code:
+- scan._call: SELL only when bearish; BUY needs bullish and score ≥ 70;
+- watch: a 20% stop;
+- difference: the model ranks by the price part only.
+
+Variants so far: 35.
+
+| Variant | S&P100 2014-19 | S&P100 2020- | bot US 2014-19 | bot US 2020- | Verdict |
+|---|---|---|---|---|---|
+| live: hold until bearish, 20% stop | +17.8 / -36 | +41.8 / -36 | +24.1 / -39 | +42.9 / -42 | baseline |
+| monthly, hold while top 15 | +24.6 / -26 | +40.7 / -30 | +31.7 / -31 | +59.7 / -49 | fail (2020- CAGR -1.1) |
+| monthly, hold while top 20 | +25.4 / -30 | +39.0 / -28 | +25.0 / -36 | +47.5 / -49 | fail |
+| bearish SELL or out of the top 20 | +23.7 / -35 | +39.4 / -26 | +23.0 / -34 | +49.1 / -41 | fail |
+
+Not shipped, although top 15 looks better risk-adjusted. Changing the pass rule after seeing a result would be
+overfitting.
+
+**Pre-registered for any future holding-rule test** (fresh data or the live forward test only):
+- max drawdown at least 5 points better in both periods;
+- CAGR no more than 2 points worse in either period.
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.

@@ -502,18 +502,36 @@ def diversify(items, histories, n=5) -> None:
     for i in [i for i in items if i["call"] == "BUY"]:
         if len(kept) >= n:
             break
-        sector, mine = i.get("sector"), _returns(histories.get(i["symbol"]))
-        why = None
-        if sector and sum(k.get("sector") == sector for k in kept) >= SECTOR_MAX:
-            why = f"{SECTOR_MAX} {sector} picks already"
-        for k in kept:
-            other = _returns(histories.get(k["symbol"]))
-            if why or mine is None or other is None:
-                break
-            both = pd.concat([mine, other], axis=1, join="inner")
-            if len(both) >= CORR_DAYS // 2 and both.corr().iloc[0, 1] > CORR_MAX:
-                why = f"too similar to {k['symbol'].split('.')[0]}"
+        why = _clash(i, kept, histories)
         if why:
             i.update(call=None, skipped=why)
         else:
             kept.append(i)
+
+
+def _clash(i, kept, histories):
+    """Why i may not join the kept picks (SECTOR_MAX, CORR_MAX), or None."""
+    sector, mine = i.get("sector"), _returns(histories.get(i["symbol"]))
+    if sector and sum(k.get("sector") == sector for k in kept) >= SECTOR_MAX:
+        return f"{SECTOR_MAX} {sector} picks already"
+    for k in kept:
+        other = _returns(histories.get(k["symbol"]))
+        if mine is None or other is None:
+            return None
+        both = pd.concat([mine, other], axis=1, join="inner")
+        if len(both) >= CORR_DAYS // 2 and both.corr().iloc[0, 1] > CORR_MAX:
+            return f"too similar to {k['symbol'].split('.')[0]}"
+    return None
+
+
+def plan_spread(items, histories, cash_huf, fx_rates, wallet=None) -> list:
+    """The BUY PLAN with diversify's rules applied to the picks themselves: a pick that clashes with a higher pick is
+    skipped and the plan re-run. A BUY the cash cannot buy (watchlist) never uses up a sector slot."""
+    while True:
+        for i in items:
+            i.pop("plan", None)
+        picks = plan(items, cash_huf, fx_rates, wallet=wallet)
+        bad = next((i for n, i in enumerate(picks) if _clash(i, picks[:n], histories)), None)
+        if bad is None:
+            return picks
+        bad.update(call=None, skipped=_clash(bad, picks[:picks.index(bad)], histories))

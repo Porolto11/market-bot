@@ -182,6 +182,25 @@ def test_plan_of_1_3m_with_10_candidates_has_at_most_3_picks_within_cash():
     assert len(picks) <= 3 and spent(picks) <= 1_300_000
 
 
+def test_unaffordable_buy_does_not_use_up_a_sector_slot():
+    """Live dry run 2026-10-28: an unaffordable tech BUY (watchlist) counted toward the 2-per-sector cap, so the plan
+    took a weaker stock from another sector."""
+    big, a, b, c = (buy_item("BIG", 1500.0, score=99), buy_item("A", 100.0, score=90),
+                    buy_item("B", 110.0, score=85), buy_item("C", 120.0, score=80))
+    for i, sector in zip((big, a, b, c), ("Tech", "Tech", "Tech", "Energy")):
+        i["sector"] = sector
+    picks = scan.plan_spread([big, a, b, c], {}, 1_300_000, FX)  # 1 BIG ≈ 528 000 HUF > cash / 3
+    assert [i["symbol"] for i in picks] == ["A", "B", "C"] and not big.get("skipped")
+    d = buy_item("D", 105.0, score=88)  # a third tech pick the cash can buy is skipped
+    d["sector"] = "Tech"
+    items = [big, a, d, b, c]
+    for i in items:
+        i.update(call="BUY")
+        i.pop("skipped", None)
+    picks = scan.plan_spread(items, {}, 1_300_000, FX)
+    assert [i["symbol"] for i in picks] == ["A", "D", "C"] and b["skipped"] == "2 Tech picks already"
+
+
 def test_expensive_top_pick_is_passed_over_unless_it_is_the_only_fit():
     big, a, b, c = (buy_item("BIG", 1500.0, score=99), buy_item("A", 100.0, score=90),
                     buy_item("B", 110.0, score=85), buy_item("C", 120.0, score=80))

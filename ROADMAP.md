@@ -14,8 +14,9 @@ The 5 weakest calls (audit trace: data → `scan.potential` → `scan._call` →
    cost stop stays. (An earlier "−20 pts" note here was measured on a different, unconditional stop: corrected in
    docs/EXPERIMENTS.md, cycle 2.)
 3. **Hold until bearish** (live) vs a monthly review keeping the top 10. The top-10 version was much better in
-   2014-19 and on bot US, but lower in 2020-. Not shipped. **Next:** re-test with a wider hold (top 15) and decide
-   after the forward test.
+   2014-19 and on bot US, but lower in 2020-. Cycle 3: top 15 and top 20 also failed the rule (top 15: much smaller
+   drawdowns, but 1.1 pts lower CAGR in 2020-). **Decision:** keep hold-until-bearish. A risk-focused rule is now
+   pre-registered for fresh data (docs/EXPERIMENTS.md).
 4. **35 of the 100 score points (analyst upside, growth) can't be tested,** and analyst targets run high
    (docs/RESEARCH.md). Open; the shadow model test in /stats compares the live score with plain momentum.
 5. **Messages lack an exit thesis:** holding period, invalidation, review date. Item 11's exit line is a start.

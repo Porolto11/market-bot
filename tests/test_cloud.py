@@ -77,7 +77,7 @@ def test_no_portfolio_market_calls_only(tmp_path):
     assert text.startswith("📊 Market scan · Tue 27 Oct, 07:45\n🇺🇸 US 🟢 uptrend · 🇪🇺 EU 🟢 uptrend\n")
     assert "📭 Market calls only (no holdings data)" in text and "💰 Budget 200 000 HUF (no cash data)\n" in text
     assert "\n\n🟢 BUY PLAN\n1️⃣ Buy 2× Nvidia (NVDA) at ≤ $" in text  # 2 shares: the fee stays under 1%
-    assert "\n   99/100 🔥 · 📈 +77% in 12 months · 🎯 analysts +4511% upside · ⏰ valid till Wed\n   🛑 exit plan: sell if it closes below $" in text
+    assert "\n   99/100 🔥 · 📈 +77% in 12 months · 🎯 analysts +4511% upside · ⏰ valid till Wed\n   🛑 exit plan: hold while the trend is up · SELL call when it turns bearish, or below $" in text
     assert " of your 200 000 HUF · left ≈ " in text
     assert "MOL" not in text  # bearish, not held: AVOID is not messaged
     assert "🔴 SELL" not in text and "🪤 WAIT FOR A DIP" in text and "• AMD · " in text and "🌡️ overheated" in text

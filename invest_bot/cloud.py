@@ -4,9 +4,9 @@
 
 No database. Holdings and cash: the encrypted bot state (entered with Telegram commands, see commands.py) when it
 has any; else env PORTFOLIO_JSON (Actions secret, or a local --portfolio file for testing) and env CASH_HUF, else
---budget-huf (env CLOUD_BUDGET_HUF, default 200 000 HUF). The BUY calls are spread out first (scan.diversify): at
-most 2 per Yahoo sector (ETFs are one sector) and none whose 6-month daily returns correlate more than 0.75 with a
-higher pick; the skipped ones are listed with the reason. The cash then buys a BUY PLAN (scan.plan): the top 3
+--budget-huf (env CLOUD_BUDGET_HUF, default 200 000 HUF). The cash buys a BUY PLAN (scan.plan_spread), spread out
+among the picks themselves: at most 2 per Yahoo sector (ETFs are one sector) and none whose 6-month daily returns
+correlate more than 0.75 with a higher pick; the skipped ones are listed with the reason. The plan is the top 3
 picks it can actually buy, in whole shares, value + fee + buy tax + FX conversion within the cash less 1%, no fee
 over 1%; the other BUYs are a watchlist. The cash is per currency (HUF, USD, EUR): a pick is paid from its own
 currency's balance first, the rest converted from HUF at the 1% spread (the line says which). Without holdings it gives
@@ -195,8 +195,9 @@ def plan_lines(i, now, n) -> list:
                                f"⏰ valid till {fmt.day(i['valid_until'], now.date())}"])]
     if pay := paid_line(i):
         out.insert(1, f"   {pay}")
-    out.append(f"   🛑 exit plan: sell if it closes below {fmt.price(round(i['limit'] * (1 - watch.HARD_STOP), 2), i['ccy'])} "
-               f"(−{watch.HARD_STOP:.0%}) — the bot alerts you")
+    # the live exits (docs/EXPERIMENTS.md): hold while the trend is up, SELL when it turns bearish, the hard stop
+    out.append(f"   🛑 exit plan: hold while the trend is up · SELL call when it turns bearish, or below "
+               f"{fmt.price(round(i['limit'] * (1 - watch.HARD_STOP), 2), i['ccy'])} (−{watch.HARD_STOP:.0%})")
     out += [f"   {fmt.flag(f)}" for f in i.get("flags") or []]
     if i.get("dist"):
         out.append(f"   {DIST}")
@@ -514,8 +515,7 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
     print(f"news for {len(headlines)} symbols in {time.monotonic() - started:.1f}s; {len(fresh)} new alert(s)",
           file=out)
     news.apply(items, headlines, now)
-    scan.diversify(items, scanned, len(items))
-    scan.plan(items, cash, rates, wallet=wallet)
+    scan.plan_spread(items, scanned, cash, rates, wallet=wallet)
     known = cash if secret_cash is not None or (portfolio or {}).get("cash_huf") is not None else None
     switches = tax.switches(items, portfolio, known, rates, tax.base(st["log"], now.year))
     dipped, dips = watch.dips(scanned, now, st.get("dips") or {})
