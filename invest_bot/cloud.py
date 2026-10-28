@@ -59,6 +59,8 @@ NO_HOLDINGS = "Market calls only (no holdings data)"
 def stop_why() -> str:
     hard = f"{watch.HARD_STOP:.0%} below your cost"
     return f"it fell {watch.STOP:.0%} below its peak with a weakening trend, or {hard}" if watch.STOP else f"it fell {hard}"
+# docs/EXPERIMENTS.md: top-3 momentum portfolios had worst drawdowns of -42..-48% (top 5: about -30%)
+CONCENTRATED = "⚖️ Risk: a few momentum stocks fell 40-50% at worst in the backtest; a core ETF softens that."
 DIST = "💸 pays dividends (taxable)"  # a distributing ETF; the accumulating ones pay nothing out
 TELEGRAM = "https://api.telegram.org/bot{token}/sendMessage"
 SCANS = ((6, 50), (21, 15))  # the weekday scan slots the listener (listen.py) runs, UTC
@@ -307,6 +309,7 @@ def message(items, regime, now, portfolio, cash_huf, has_cash=False, rates=None,
         parts.append("\n".join(
             [*(["🟢 BUY PLAN"] + [line for n, i in enumerate(buys, 1) for line in plan_lines(i, now, n)]
                + [f"🧮 Total ≈ {_money(total)} of your {_money(cash_huf)} · left ≈ {_money(cash_huf - total)}"]
+               + ([CONCENTRATED] if sum(i.get("kind") != "etf" for i in buys) >= 2 else [])
                if buys else [f"🟢 BUY: nothing fits {'your cash' if known else 'the budget'} "
                              f"({_money(cash_huf)}), fees included"]),
              *([f"👀 Watchlist: " + " · ".join(f"{_label(i)} {i['score']}" for i in watch)] if watch else [])]))

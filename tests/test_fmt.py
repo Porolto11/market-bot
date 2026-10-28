@@ -61,7 +61,11 @@ def test_scan_message_layout():
             "🧮 Total ≈ 120 000 HUF of your 250 000 HUF · left ≈ 130 000 HUF\n"
             "👀 Watchlist: Micron (MU) 99\n\n") in text
     assert "⏳ WAIT (would be BUY)\n• Eli Lilly (LLY) · 88/100 — Earnings in 2 days — wait for the report.\n\n" in text
-    assert text.endswith("\n\nℹ️ " + cloud.FOOTER)
+    assert text.endswith("\n\nℹ️ " + cloud.FOOTER) and cloud.CONCENTRATED not in text  # 1 pick: no risk line
+    two = items + [item("AMD", "BUY", 78, qty=1, one=60000.0, name="AMD", plan=True, value_huf=60000.0,
+                        fee_huf=800.0, fee_pct=800 / 60000)]
+    text = cloud.message(two, REGIME, TUE, None, 250000, has_cash=True)
+    assert f" HUF\n{cloud.CONCENTRATED}\n👀 Watchlist" in text  # after the total, before the watchlist
     # 6-month momentum when there is no 12-1 value; no analyst chip without >= 5 analysts (upside_pct None)
     six = cloud.chips(item("X", "BUY", mom_long=0.5, mom_6m=0.5, parts=dict(upside_pct=None)))
     assert six == ["📈 +50% in 6 months"]
