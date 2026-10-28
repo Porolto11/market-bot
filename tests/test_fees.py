@@ -66,8 +66,8 @@ def test_buy_tax_in_the_sizing_and_the_plan():
     value, fee, tax = scan.cost(lvmh, lvmh["qty"], fx, spread=False)  # the plan shows market-rate amounts
     assert picks and tax == pytest.approx(value * 0.004) and lvmh["tax_huf"] == pytest.approx(tax)
     assert lvmh["approx_huf"] == pytest.approx(value + fee + tax + lvmh["fx_cost_huf"]) and lvmh["approx_huf"] <= 990_000
-    line = cloud.plan_lines(lvmh, datetime(2026, 10, 27, 9, tzinfo=timezone.utc), 1)[0]
-    assert f"+ FR tax 0.4% ≈ {cloud._money(tax)}" in line
+    total = cloud.plan_total([lvmh], lvmh["approx_huf"], 1_000_000)  # the tax is part of the fees line
+    assert f"fees ≈ {cloud.fmt.k(fee + tax + lvmh['fx_cost_huf'])}" in total
     etf = dict(lvmh, symbol="CNDX.AS", kind="etf")
     scan.plan([etf], 1_000_000, fx)
     assert etf["tax_huf"] == 0 and "tax" not in cloud.plan_lines(etf, datetime(2026, 10, 27, tzinfo=timezone.utc), 1)[0]

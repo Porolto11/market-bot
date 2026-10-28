@@ -48,6 +48,18 @@ def huf(x) -> str:
     return f"{approx(x)} HUF"
 
 
+def k(x) -> str:
+    """A short HUF amount for the compact plan: 1.04M, 443k, 2.4k, 950."""
+    a = abs(x)
+    if a >= 1_000_000:
+        return f"{x / 1_000_000:.2f}M"
+    if a >= 10_000:
+        return f"{x / 1000:.0f}k"
+    if a >= 1000:
+        return f"{x / 1000:.1f}k"
+    return f"{x:.0f}"
+
+
 def amount(x, ccy) -> str:
     """A cash amount: whole forints for HUF (120 000 HUF), else cents with the sign ($1 234.50, €300.00, 12.00 DKK)."""
     if ccy == "HUF":

@@ -95,15 +95,15 @@ def test_plan_pays_from_balances_first_and_converts_the_rest_within_the_cash():
     assert hu["convert_huf"] == 0 and hu["fx_cost_huf"] == 0
     huf_used = (hu["approx_huf"] + us["convert_huf"] + eu["convert_huf"])
     assert huf_used <= 400_000 * 0.99 + 1e-6  # the HUF balance covers the HUF pick and every conversion
-    lines = "\n".join(cloud.plan_lines(us, NOW, 1) + cloud.plan_lines(eu, NOW, 2) + cloud.plan_lines(hu, NOW, 3))
-    assert "from your USD balance" in lines and "convert ≈ " in lines and "→ EUR (1% ≈ " in lines
+    total = cloud.plan_total([us, eu, hu], us["approx_huf"] + eu["approx_huf"] + hu["approx_huf"], 400_000)
+    assert " HUF → EUR" in total and ("HUF → USD" in total) == bool(us["convert_huf"])  # only what HUF must buy
 
 
 def test_a_pick_paid_from_its_own_balance_has_no_fx_cost():
     a = item("US1", 100.0, "USD")
     scan.plan([a], 0, FX, wallet={"HUF": 0, "USD": 1000})
     assert a["plan"] and a["convert_huf"] == 0 and a["fx_cost_huf"] == 0 and a["own"] <= 990
-    assert cloud.paid_line(a) == f"💵 pay from your USD balance (${a['own']:,.2f})".replace(",", " ")
+    assert "convert" not in cloud.plan_total([a], a["approx_huf"], 400_000)  # paid from the USD balance
     e = item("EU1.DE", 100.0, "EUR")  # no EUR and no HUF to convert from: it cannot be bought
     assert scan.plan([e], 0, FX, wallet={"HUF": 0, "USD": 1000}) == []
     usd_only = [item("US1", 100.0, "USD"), item("EU1.DE", 100.0, "EUR", 85)]
@@ -133,4 +133,4 @@ def test_dry_run_with_a_multi_currency_state_file(tmp_path):
     code, sent, out = go(tmp_path, env={}, a=args(tmp_path, state_file=str(plain), force=True))
     assert code == 0 and not sent
     assert "💰 Cash ≈ 400 000 HUF · $600.00 · €300.00 ≈ " in out and " HUF in total" in out
-    assert "from your USD balance" in out
+    assert "\n💸 ≈ " in out and "fees ≈ " in out

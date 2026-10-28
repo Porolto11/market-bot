@@ -26,7 +26,7 @@ def test_short_tickers_never_show_the_exchange_suffix():
     assert fmt.label("ASML", "ASML.AS") == "ASML" and fmt.label("Micron", "MU") == "Micron (MU)"
     text = cloud.message([item("ASML.AS", "BUY", name="ASML", ccy="EUR", plan=True, value_huf=59000.0,
                                fee_huf=1000.0, fee_pct=1000 / 59000)], REGIME, TUE, None, 250000)
-    assert "1️⃣ Buy 1× ASML at ≤ €179.4 ≈ 59 000 HUF + fee 1 000 HUF (1.69%)" in text and ".AS" not in text
+    assert "1️⃣ ASML · 1× ≤ €179.4 ≈ 60k HUF\n   ASML · 90/100" in text and ".AS" not in text
     assert "👀 Watchlist: ASML 90" in cloud.message([item("ASML.AS", "BUY", name="ASML")], REGIME, TUE, None, 0)
 
 
@@ -52,20 +52,19 @@ def test_scan_message_layout():
                          alerts=["📉 AMD −8.2% today", "   📰 AMD guidance cut (Reuters)"])
     assert text.startswith("📊 Market scan · Tue 27 Oct, 07:45\n🇺🇸 US 🟢 uptrend · 🇪🇺 EU 🟡 sideways\n"
                            "💰 Cash ≈ 250 000 HUF\n📭 Market calls only (no holdings data)\n\n"
-                           "🎯 TODAY'S MOVE\n🟢 Buy the plan: 2× ANET ≈ 120 000 HUF\n"
-                           "Why: the top-ranked picks your cash can buy, fees included.\n\n"
-                           "🚨 ALERTS\n📉 AMD −8.2% today\n   📰 AMD guidance cut (Reuters)\n\n🟢 BUY PLAN\n")
-    assert ("🟢 BUY PLAN\n1️⃣ Buy 2× Arista Networks (ANET) at ≤ $179.4 ≈ 119 000 HUF + fee 800 HUF (0.67%)\n"
-            "   80/100 ✅ · 📈 +424% in 12 months · 🎯 analysts +71% upside · ⏰ valid till Wed\n"
-            "   🛑 exit plan: hold while the trend is up · SELL call when it turns bearish, or below $143.52 (−20%)\n"
-            "🧮 Total ≈ 120 000 HUF of your 250 000 HUF · left ≈ 130 000 HUF\n"
+                           "🎯 TODAY'S MOVE\n🟢 Buy the plan: 2× ANET ≈ 120k HUF\n\n"
+                           "🚨 ALERTS\n📉 AMD −8.2% today\n   📰 AMD guidance cut (Reuters)\n\n🟢 BUY PLAN")
+    assert ("🟢 BUY PLAN · limit orders, valid till Wed\n"  # two lines per pick: what to buy, then why and the stop
+            "1️⃣ ANET · 2× ≤ $179.4 ≈ 120k HUF\n"
+            "   Arista Networks · 80/100 ✅ · +424% in 12m · 🛑 $143.52\n"
+            "💸 ≈ 120k of 250k HUF (≈ 130k left) · fees ≈ 800\n"
             "👀 Watchlist: Micron (MU) 99\n\n") in text
     assert "⏳ WAIT (would be BUY)\n• Eli Lilly (LLY) · 88/100 — Earnings in 2 days — wait for the report.\n\n" in text
     assert text.endswith("\n\nℹ️ " + cloud.FOOTER) and cloud.CONCENTRATED not in text  # 1 pick: no risk line
     two = items + [item("AMD", "BUY", 78, qty=1, one=60000.0, name="AMD", plan=True, value_huf=60000.0,
                         fee_huf=800.0, fee_pct=800 / 60000)]
     text = cloud.message(two, REGIME, TUE, None, 250000, has_cash=True)
-    assert f" HUF\n{cloud.CONCENTRATED}\n👀 Watchlist" in text  # after the total, before the watchlist
+    assert f"\n{cloud.CONCENTRATED}\n👀 Watchlist" in text and "\n💸 ≈ " in text  # after the total, before the watchlist
     # 6-month momentum when there is no 12-1 value; no analyst chip without >= 5 analysts (upside_pct None)
     six = cloud.chips(item("X", "BUY", mom_long=0.5, mom_6m=0.5, parts=dict(upside_pct=None)))
     assert six == ["📈 +50% in 6 months"]
@@ -76,11 +75,9 @@ def test_core_line_comes_first_and_the_picks_are_numbered_from_1():
                 plan=True, core=True, core_share=0.5, value_huf=620000.0, fee_huf=1500.0, fee_pct=1500 / 620000)
     pick = item("ANET", "BUY", 80, qty=2, plan=True, value_huf=119000.0, fee_huf=800.0, fee_pct=800 / 119000)
     text = cloud.message([pick, core], REGIME, TUE, None, 1_000_000, has_cash=True)
-    assert ("🟢 BUY PLAN\n🧱 Core: Buy 9× Vanguard FTSE All-World (VWCE) at ≤ €172.34 ≈ 620 000 HUF + fee 1 500 HUF"
-            in text)
-    assert "   🎯 brings your world ETF to ~50% of your money (/core to change) · hold it long-term" in text
-    assert "\n1️⃣ Buy 2× ANET" in text and "2️⃣" not in text
-    assert "Why: a world-ETF base (🧱) plus the top-ranked picks" in text
+    assert ("🟢 BUY PLAN · limit orders, valid till Wed\n🧱 VWCE · 9× ≤ €172.34 ≈ 540k HUF\n"
+            "   Vanguard FTSE All-World · base to 50% of your money · hold, add on 🛒 dips\n1️⃣ ANET · 2× ≤ ") in text
+    assert "2️⃣" not in text and "🟢 Buy the plan: 9× VWCE, 2× ANET ≈ " in text
 
 
 def test_todays_move_priority():
@@ -97,8 +94,7 @@ def test_todays_move_priority():
     assert move([buy, fits], [switch]) == ("🔁 Sell 10× OTP (49) → buy 1× MU (98)\nWhy: MU scores far higher and "
                                            "your cash alone cannot buy one share.")
     # 3. the BUY PLAN
-    assert move([buy, fits]) == ("🟢 Buy the plan: 1× ANET ≈ 60 000 HUF\n"
-                                 "Why: the top-ranked picks your cash can buy, fees included.")
+    assert move([buy, fits]) == "🟢 Buy the plan: 1× ANET ≈ 60k HUF"
     # 4. no BUY fits
     assert move([buy]) == "🤷 Nothing fits your cash — top pick Micron (MU) needs ≈ 302 000 HUF. Deposit or wait."
     # 5. no calls: no trade is a valid answer

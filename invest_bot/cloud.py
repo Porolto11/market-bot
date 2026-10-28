@@ -53,8 +53,8 @@ MAX_STALE = 8  # stale symbols named in the header
 MAX_ALERTS = 200  # (symbol, date) keys of sent big-move alerts
 MAX_LEN = fmt.MAX_LEN  # longer messages are split at section boundaries
 WORKERS = 8
-FOOTER = ("Calls from price trend + fundamentals, not certainty. HUF amounts use approximate Yahoo FX; whole "
-          "shares only. You place and confirm every order.")
+FOOTER = ("🛑 = sell if it closes below that price (−20%), or when the bot calls sell. 🧱 = your world-ETF base "
+          "(/core sets its share). Analysis, not certainty: you place every order.")
 NO_HOLDINGS = "Market calls only (no holdings data)"
 def stop_why() -> str:
     hard = f"{watch.HARD_STOP:.0%} below your cost"
@@ -197,39 +197,38 @@ def _numbered(buys) -> list:
 
 
 def plan_lines(i, now, n) -> list:
-    """A BUY PLAN line: 'Buy N× X at ≤ limit ≈ value HUF + fee F HUF (f%)[ + FR tax 0.4% ≈ T HUF]', then score,
-    chips, deadline, flags. 🆕 marks a pick the last sent message did not have (i['new'], set in run)."""
-    out = [f"{fmt.NUMBERS[n - 1]} {'🆕 ' if i.get('new') else ''}Buy {i['qty']}× {_label(i)} at ≤ {fmt.price(i['limit'], i['ccy'])} ≈ "
-           f"{_money(i['value_huf'])} + fee {_money(i['fee_huf'])} ({i['fee_pct'] * 100:.2f}%)"
-           + (f" + {fees.tax_label(i['symbol'])} ≈ {_money(i['tax_huf'])}" if i.get("tax_huf") else ""),
-           "   " + " · ".join([fmt.scored(i["score"], "/100"), *chips(i),
-                               f"⏰ valid till {fmt.day(i['valid_until'], now.date())}"])]
-    if pay := paid_line(i):
-        out.insert(1, f"   {pay}")
+    """Two lines per pick (phone-readable): 'N️⃣ TICK · Q× ≤ limit ≈ 144k HUF' and 'name · score · momentum ·
+    🛑 stop' (the core 🧱: its target instead), then flags. Fees, conversions and the deadline are summed once in
+    plan_total. 🆕 marks a pick the last sent message did not have (i['new'], set in run)."""
+    mark = "🧱" if i.get("core") else fmt.NUMBERS[n - 1]
+    out = [f"{mark} {'🆕 ' if i.get('new') else ''}{fmt.tick(i['symbol'])} · {i['qty']}× ≤ "
+           f"{fmt.price(i['limit'], i['ccy'])} ≈ {fmt.k(i['approx_huf'])} HUF"]
     if i.get("core"):  # scan.core_plan: the long-term base, no trend exit
-        out[0] = out[0].replace(f"{fmt.NUMBERS[n - 1]} ", "🧱 Core: ", 1)
-        out[-1] = (f"   🎯 brings your world ETF to ~{i['core_share']:.0%} of your money (/core to change) · hold it "
-                   f"long-term, add on 🛒 dips · ⏰ valid till {fmt.day(i['valid_until'], now.date())}")
+        out.append(f"   {i['name']} · base to {i['core_share']:.0%} of your money · hold, add on 🛒 dips")
         return out
-    # the live exits (docs/EXPERIMENTS.md): hold while the trend is up, SELL when it turns bearish, the hard stop
-    out.append(f"   🛑 exit plan: hold while the trend is up · SELL call when it turns bearish, or below "
-               f"{fmt.price(round(i['limit'] * (1 - watch.HARD_STOP), 2), i['ccy'])} (−{watch.HARD_STOP:.0%})")
+    m = i.get("mom_long")
+    # the live exits (docs/EXPERIMENTS.md): SELL when the trend turns bearish, or the hard stop
+    out.append("   " + " · ".join([i["name"], fmt.scored(i["score"], "/100"),
+                                   *([f"{fmt.signed(m * 100, 0)} in "
+                                      f"{6 if i.get('mom_6m') is not None and m == i['mom_6m'] else 12}m"]
+                                     if m is not None else []),
+                                   f"🛑 {fmt.price(round(i['limit'] * (1 - watch.HARD_STOP), 2), i['ccy'])}"]))
     out += [f"   {fmt.flag(f)}" for f in i.get("flags") or []]
     if i.get("dist"):
         out.append(f"   {DIST}")
     return out
 
 
-def paid_line(i) -> str:
-    """How a plan pick is paid (scan.pay): '💵 pay from your USD balance ($905.50)', '💱 convert ≈ X HUF → USD (1% ≈
-    Y HUF)', or both; '' for a HUF pick."""
-    w, own, conv = i.get("wallet_ccy"), i.get("own") or 0.0, i.get("convert_huf") or 0.0
-    if not w or w == "HUF":
-        return ""
-    convert = f"convert ≈ {_money(conv)} → {w} (1% ≈ {_money(i.get('fx_cost_huf') or 0.0)})"
-    if own and conv:
-        return f"💱 {fmt.amount(own, w)} from your {w} balance + {convert}"
-    return f"💵 pay from your {w} balance ({fmt.amount(own, w)})" if own else f"💱 {convert}"
+def plan_total(buys, total, cash_huf) -> str:
+    """'💸 ≈ 593k of 708k HUF (≈ 115k left) · fees ≈ 2.4k · convert ≈ 337k HUF → EUR': the plan's money in one line.
+    Fees include buy taxes and the 1% FX spread; conversions are what HUF has to be exchanged (scan.pay)."""
+    fee = sum((i.get("fee_huf") or 0) + (i.get("tax_huf") or 0) + (i.get("fx_cost_huf") or 0) for i in buys)
+    conv = {}
+    for i in buys:
+        if i.get("convert_huf"):
+            conv[i["wallet_ccy"]] = conv.get(i["wallet_ccy"], 0) + i["convert_huf"]
+    return (f"💸 ≈ {fmt.k(total)} of {fmt.k(cash_huf)} HUF (≈ {fmt.k(cash_huf - total)} left) · fees ≈ {fmt.k(fee)}"
+            + "".join(f" · convert ≈ {fmt.k(v)} HUF → {c}" for c, v in conv.items()))
 
 
 def buy_lines(i, now, n=None) -> list:
@@ -264,9 +263,7 @@ def todays_move(buys, sells, stops, switches, watch=()) -> str:
                 "cannot buy one share.")
     if buys:
         return ("🟢 Buy the plan: " + ", ".join(f"{i['qty']}× {fmt.tick(i['symbol'])}" for i in buys)
-                + f" ≈ {_money(sum(i['approx_huf'] for i in buys))}\n"
-                + ("Why: a world-ETF base (🧱) plus the top-ranked picks your cash can buy, fees included."
-                   if any(i.get("core") for i in buys) else "Why: the top-ranked picks your cash can buy, fees included."))
+                + f" ≈ {fmt.k(sum(i['approx_huf'] for i in buys))} HUF")
     if watch:
         top = watch[0]
         need = f" needs ≈ {_money(top['one_share_huf'])}" if top.get("one_share_huf") else " has no share count"
@@ -322,15 +319,17 @@ def message(items, regime, now, portfolio, cash_huf, has_cash=False, rates=None,
     if buys or watch:
         total = sum(i["approx_huf"] for i in buys)
         parts.append("\n".join(
-            [*(["🟢 BUY PLAN"] + [line for n, i in _numbered(buys) for line in plan_lines(i, now, n)]
-               + [f"🧮 Total ≈ {_money(total)} of your {_money(cash_huf)} · left ≈ {_money(cash_huf - total)}"]
+            [*([f"🟢 BUY PLAN · limit orders, valid till "
+                f"{fmt.day(min(i['valid_until'] for i in buys), now.date())}"]
+               + [line for n, i in _numbered(buys) for line in plan_lines(i, now, n)]
+               + [plan_total(buys, total, cash_huf)]
                + ([CONCENTRATED] if sum(i.get("kind") != "etf" for i in buys) >= 2 else [])
                if buys else [f"🟢 BUY: nothing fits {'your cash' if known else 'the budget'} "
                              f"({_money(cash_huf)}), fees included"]),
              *([f"👀 Watchlist: " + " · ".join(f"{_label(i)} {i['score']}" for i in watch)] if watch else [])]))
     if skipped := [i for i in items if i.get("skipped")]:
-        parts.append("↪️ SKIPPED (keeps the picks spread out)\n" + "\n".join(
-            f"• {_label(i)} · {i['score']}/100 — {i['skipped']}" for i in skipped))
+        parts.append("↪️ Also strong, skipped to keep the picks spread out: "
+                     + " · ".join(f"{fmt.tick(i['symbol'])} {i['score']}" for i in skipped))
     if waits:
         parts.append("⏳ WAIT (would be BUY)\n" + "\n".join(
             f"• {_label(i)} · {i['score']}/100 — {_wait_why(i)}" for i in waits))

@@ -90,7 +90,7 @@ def test_new_plan_picks_are_marked(tmp_path):
     st["sent"][-1]["calls"] = [c for c in st["sent"][-1]["calls"] if c[0] != "NVDA"]
     state.save(st, str(tmp_path / "state" / "state.enc"), TOKEN)
     _, sent, _ = go(tmp_path, sent=sent, force=True)
-    assert "1️⃣ 🆕 Buy 2× Nvidia (NVDA)" in sent[1][2]
+    assert "1️⃣ 🆕 NVDA · 2× ≤ $" in sent[1][2]
     _, sent, _ = go(tmp_path, sent=sent, force=True)
     assert "🆕" not in sent[2][2]  # the same pick again: still on, not new
 
@@ -101,9 +101,9 @@ def test_no_portfolio_market_calls_only(tmp_path):
     text = sent[0][2]
     assert text.startswith("📊 Market scan · Tue 27 Oct, 07:45\n🇺🇸 US 🟢 uptrend · 🇪🇺 EU 🟢 uptrend\n")
     assert "📭 Market calls only (no holdings data)" in text and "💰 Budget 200 000 HUF (no cash data)\n" in text
-    assert "\n\n🟢 BUY PLAN\n1️⃣ Buy 2× Nvidia (NVDA) at ≤ $" in text  # 2 shares: the fee stays under 1%
-    assert "\n   99/100 🔥 · 📈 +77% in 12 months · 🎯 analysts +4511% upside · ⏰ valid till Wed\n   🛑 exit plan: hold while the trend is up · SELL call when it turns bearish, or below $" in text
-    assert " of your 200 000 HUF · left ≈ " in text
+    assert "\n\n🟢 BUY PLAN · limit orders, valid till Wed\n1️⃣ NVDA · 2× ≤ $" in text  # 2 shares: fee under 1%
+    assert "\n   Nvidia · 99/100 🔥 · +77% in 12m · 🛑 $" in text
+    assert "\n💸 ≈ " in text and " of 200k HUF (≈ " in text
     assert "MOL" not in text  # bearish, not held: AVOID is not messaged
     assert "🔴 SELL" not in text and "🪤 WAIT FOR A DIP" in text and "• AMD · " in text and "🌡️ overheated" in text
     assert text.endswith(cloud.FOOTER) and "\n\n🎯 TODAY'S MOVE\n🟢 Buy " in text
@@ -116,9 +116,9 @@ def test_budget_from_env_and_whole_shares(tmp_path):
     _, sent, _ = go(tmp_path, env={"TELEGRAM_TOKEN": TOKEN, "TELEGRAM_CHAT_ID": "42", "CLOUD_BUDGET_HUF": "1000000"})
     text = sent[0][2]
     assert "💰 Budget 1 000 000 HUF (no cash data)\n" in text
-    nv = next(l for l in text.splitlines() if l.startswith("1️⃣ Buy "))
-    qty = int(nv.split("Buy ")[1].split("×")[0])
-    assert qty >= 1 and " + fee " in nv and nv.endswith("%)")
+    nv = next(l for l in text.splitlines() if l.startswith("1️⃣ NVDA · "))
+    qty = int(nv.split(" · ")[1].split("×")[0])
+    assert qty >= 1 and nv.endswith(" HUF") and "fees ≈ " in text
     assert f"🎯 TODAY'S MOVE\n🟢 Buy the plan: {qty}× NVDA ≈ " in text
 
 
@@ -159,7 +159,7 @@ def test_cash_secret_sizes_buys(tmp_path):
     _, sent, log = go(tmp_path, env=dict(SECRETS, CASH_HUF="1000000"))
     text = sent[0][2]
     assert "💰 Cash ≈ 1 000 000 HUF\n📭 Market calls only (no holdings data)" in text
-    assert "1️⃣ Buy " in text and " of your 1 000 000 HUF · left ≈ " in text and "Nothing fits" not in text
+    assert "\n1️⃣ " in text and " of 1.00M HUF (≈ " in text and "Nothing fits" not in text
     assert "1000000" not in log and "1 000 000" not in log
     _, sent, _ = go(tmp_path, env=dict(SECRETS, CASH_HUF="500000", PORTFOLIO_JSON=json.dumps(PORTFOLIO)), force=True)
     assert "💰 Cash ≈ 465 000 HUF" in sent[0][2]  # CASH_HUF wins over the holdings' cash, less pending buys

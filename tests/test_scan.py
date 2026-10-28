@@ -282,7 +282,7 @@ def test_at_most_two_picks_per_sector_and_etfs_count_as_one_sector():
     assert [i["skipped"] for i in items if i.get("skipped")] == ["2 Technology picks already"] * 2
     from invest_bot import cloud
     text = cloud.message(items, {}, NOW, None, 1_000_000, True, FX)
-    assert f"↪️ SKIPPED (keeps the picks spread out)\n• {buys[2]} · " in text and "— 2 Technology picks already" in text
+    assert f"↪️ Also strong, skipped to keep the picks spread out: {buys[2]} " in text
     assert cloud.calls(items) == sorted([b, "BUY"] for b in buys[:2])
     items = scanned(hs)  # no sector known, uncorrelated: all kept, n caps the count
     scan.diversify(items, hs, 3)

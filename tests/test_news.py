@@ -200,4 +200,4 @@ def test_alert_headlines_prefer_the_company():
 
 def test_unrelated_negative_headline_keeps_the_buy(tmp_path):
     _, sent, _ = run(tmp_path, news_fn=lambda s: [old("Bitcoin miners face SEC probe")] if s == "NVDA" else [])
-    assert "× Nvidia (NVDA) at ≤ " in sent[0] and "WAIT (would be BUY)" not in sent[0]
+    assert "\n1️⃣ NVDA · " in sent[0] and "WAIT (would be BUY)" not in sent[0]
