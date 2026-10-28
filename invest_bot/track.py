@@ -1,7 +1,7 @@
 """Call tracking: log every sent BUY / SELL / WAIT call and score it against CSPX.L after about 1, 3 and 6 months.
 
 The state's `calls` list holds dict(d=scan date, sym, call, px=price at the call, spx=CSPX.L price at the call,
-x={horizon: excess}) for the newest MAX_CALLS calls. excess = symbol return - CSPX.L return from the call to the
+x={horizon: excess}, at=[score, *PARTS] at the call when known) for the newest MAX_CALLS calls. excess = symbol return - CSPX.L return from the call to the
 close HORIZON weekdays later, from the scan's own price histories. A BUY won when excess > 0; SELL and the WAIT
 calls won when excess < 0 (avoiding or waiting helped). A SWITCH is logged as sym "X>Y" (sell X, buy Y) and scored
 as Y against X instead of CSPX.L (px = Y's price, spx = X's): it won when Y beat X. edge() turns excess into
@@ -43,8 +43,12 @@ def _pair(sym):
     return (buy, sell) if buy else (sym, BENCH)
 
 
-def log(st, items, today, histories):
-    """Add the sent calls ([symbol, call] pairs) of `today` to st['calls']; one per (date, symbol, call)."""
+PARTS = ("momentum", "growth", "upside", "trend")  # scan.potential's score parts
+
+
+def log(st, items, today, histories, by=None):
+    """Add the sent calls ([symbol, call] pairs) of `today` to st['calls']; one per (date, symbol, call). by: {symbol:
+    scan item}: the call also keeps at=[score, *PARTS] as they were, for parts_test."""
     old = st.setdefault("calls", [])
     seen = {(c["d"], c["sym"], c["call"]) for c in old}
     for sym, call in items:
@@ -53,6 +57,9 @@ def log(st, items, today, histories):
         key = (today.isoformat(), sym, call)
         if call in TRACKED and px and spx and key not in seen:
             old.append(dict(d=key[0], sym=sym, call=call, px=px, spx=spx, x={}))
+            i = (by or {}).get(sym)
+            if i and i.get("parts"):
+                old[-1]["at"] = [i["score"], *(i["parts"].get(p) for p in PARTS)]
             seen.add(key)
     st["calls"] = old[-MAX_CALLS:]
 
@@ -129,9 +136,28 @@ def stats(st) -> str:
             part = [r for r in rows if r[0] == call]
             if part or call not in ("WAIT", "SWITCH"):
                 lines.append(f"• {call}: {_fmt(part)}")
-    lines += model_test(st)
+    lines += model_test(st) + parts_test(st)
     lines.append(f"\nℹ️ Too early = fewer than {MIN_N} scored calls.")
     return "\n".join(lines)
+
+
+def parts_test(st, h=20) -> list:
+    """Which score parts predicted: for the scored BUY calls, the average edge vs CSPX.L when a part was above its
+    median vs at or below it. A part shows only once both halves have MIN_N calls."""
+    rows = [(c["at"], c["x"][str(h)]) for c in st.get("calls") or []
+            if c["call"] == "BUY" and c.get("at") and str(h) in c["x"]]
+    out = []
+    for n, part in enumerate(PARTS, 1):
+        vals = [(a[n], x) for a, x in rows if a[n] is not None]
+        if not vals:
+            continue
+        mid = float(np.median([v for v, _ in vals]))
+        hi, lo = [x for v, x in vals if v > mid], [x for v, x in vals if v <= mid]
+        if len(hi) >= MIN_N and len(lo) >= MIN_N:
+            out.append(f"• {part}: high {np.mean(hi) * 100:+.1f}% vs low {np.mean(lo) * 100:+.1f}% "
+                       f"(n={len(hi)}/{len(lo)})")
+    return [f"\n🔬 Which score parts predicted ({HORIZONS[h]} BUY edge vs CSPX.L, above vs below median)", *out] \
+        if out else []
 
 
 def model_test(st) -> list:

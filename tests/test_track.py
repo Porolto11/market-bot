@@ -28,6 +28,21 @@ def test_log_dedupes_per_day_and_caps():
     assert len(st["calls"]) == track.MAX_CALLS and st["calls"][-1]["sym"] == "NVDA"
 
 
+def test_log_keeps_the_score_parts_and_parts_test_splits_them():
+    h = {"NVDA": series(1.0), "CSPX.L": series(1.0, base=500)}
+    st = {}
+    item = dict(symbol="NVDA", score=88, parts=dict(momentum=38.0, growth=20.0, upside=15.0, trend=15.0))
+    track.log(st, [["NVDA", "BUY"], ["X", "BUY"]], D0, h, by={"NVDA": item})
+    assert st["calls"][0]["at"] == [88, 38.0, 20.0, 15.0, 15.0]
+    assert track.parts_test(st) == []  # nothing scored yet
+    st["calls"] = [dict(d="2026-01-05", sym=f"S{k}", call="BUY", px=1, spx=1, at=[80, k, 10, 10, 10],
+                        x={"20": 0.01 * k}) for k in range(30)]
+    lines = track.parts_test(st)
+    assert lines[1].startswith("• momentum: high +22.0% vs low +7.0% (n=15/15)")
+    assert not any("growth" in l for l in lines)  # all equal: no 'high' half
+    assert "🔬 Which score parts predicted" in track.stats(st)
+
+
 def test_score_horizons_vs_cspx():
     h = {"UP": series(1.01), "DOWN": series(0.99), "CSPX.L": series(1.0, base=500)}
     st = {"calls": [dict(d=D0.isoformat(), sym=s, call=c, px=100.0, spx=500.0, x={})

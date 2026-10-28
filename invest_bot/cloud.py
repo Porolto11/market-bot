@@ -563,7 +563,7 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
         print(str(e).replace(token, "***"), file=out)
         return 1
     st["sent"] = [*st["sent"], dict(calls=current, at=now.isoformat(timespec="seconds"))][-state.MAX_SENT:]
-    track.log(st, current, now.date(), hists)
+    track.log(st, current, now.date(), hists, by={i["symbol"]: i for i in items})
     st["alerts"] = [*seen, *(f"{s}|{d}" for s, _, d in fresh), *(k for k, _ in watched if k.startswith("stop|"))
                     ][-MAX_ALERTS:]
     st["dips"] = dips

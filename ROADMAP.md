@@ -19,9 +19,13 @@ The 5 weakest calls (audit trace: data → `scan.potential` → `scan._call` →
    pre-registered for fresh data (docs/EXPERIMENTS.md).
 4. **35 of the 100 score points (analyst upside, growth) can't be tested,** and analyst targets run high
    (docs/RESEARCH.md). Open; the shadow model test in /stats compares the live score with plain momentum.
-5. **Messages lack an exit thesis:** holding period, invalidation, review date. Item 11's exit line is a start.
-   **Next:** after items 2-3, say "held for momentum, reviewed monthly; out if it leaves the top 10 or −20% from
-   cost".
+5. **Messages lacked an exit thesis.** **Fixed (d631add):** each plan pick says "hold while the trend is up · SELL
+   call when it turns bearish, or below X (−20%)", which is exactly the live exits.
+6. **Found in the live dry run:** the sector cap counted BUYs the cash couldn't buy, so the top tech picks were
+   skipped for weaker ones. **Fixed (d631add):** `scan.plan_spread` applies the caps to the real picks.
+
+**Next:** record the conditions at call time (score parts, momentum) with each logged call, so /stats can later
+show which parts of the score actually predict. This is the "learn which analyses are useful" item.
 
 Measured and rejected: buying dips in leaders, 52-week-high proximity, volatility-scaled momentum, a top 3
 instead of 5 (much deeper drawdowns: the buy plan's 3 picks are more concentrated than the backtest), and trend
