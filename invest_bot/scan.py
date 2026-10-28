@@ -58,6 +58,7 @@ UNIVERSE = {
 CALLS = ("BUY", "WAIT_FOR_DIP", "WAIT", "HOLD", "SELL", "AVOID")  # WAIT: a BUY held back by earnings or news
 ACTIONABLE = ("BUY", "WAIT_FOR_DIP", "SELL")
 BUY_SCORE = 70
+CORE = ("CSPX.L", "CNDX.AS", "VVSM.DE", "VWCE.DE")  # long-term base ETFs: dip alerts (watch.dips), no trend SELL
 # RSI above this turns a BUY into WAIT_FOR_DIP. Off by default: the wait cost ~9 pts/yr in both test periods
 # (docs/EXPERIMENTS.md). Rollback: env RSI_HOT=70.
 RSI_HOT = float(os.environ["RSI_HOT"]) if os.environ.get("RSI_HOT") else None
@@ -326,6 +327,8 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
         ccy = fund.get("currency") or default_ccy(s)
         held = float(holdings.get(s) or 0)
         call = _call(held > 0, rating, score, rsi)
+        core = s in CORE and call == "SELL"  # a long-term base: no trend SELL (SPY: -5..7 pts/yr, EXPERIMENTS)
+        call = "HOLD" if core else call
         why = _why(score, ind, parts)
         if s in stale:
             flags.append(f"stale data (last close {stale[s] or '?'})")
@@ -365,7 +368,8 @@ def run_scan(histories, funds, now, cash_huf, holdings, fx_rates, moms=None, sta
             act = (f"Trend turned bearish (score {r['score']}): sell {qty} at {rules._px(limit)} {ccy}"
                    + (f" (≈ {_huf(approx)} HUF)." if approx else "."))
         elif call == "HOLD":
-            act = f"Trend is {rating}: hold."
+            act = ("Trend is bearish, but this is a core ETF: hold it long-term; dips are chances to add."
+                   if core else f"Trend is {rating}: hold.")
         elif call == "AVOID":
             act = f"Trend is bearish (score {r['score']}): avoid for now."
         else:

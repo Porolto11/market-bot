@@ -107,6 +107,15 @@ def test_no_rsi_wait_by_default(monkeypatch):
                 "HOT")["call"] == "WAIT_FOR_DIP"
 
 
+def test_core_etf_gets_no_trend_sell():
+    bear = hist(up=0.985, down=1.01)
+    hs = universe({"VWCE.DE": bear, "HELDBEAR": bear})
+    items = scan.run_scan(hs, {}, NOW, 1_000_000, {"VWCE.DE": 3, "HELDBEAR": 7}, FX)
+    v = item(items, "VWCE.DE")
+    assert v["rating"] == "bearish" and v["call"] == "HOLD" and "core ETF: hold it long-term" in v["reason"]
+    assert item(items, "HELDBEAR")["call"] == "SELL"
+
+
 def test_call_rules_each_branch():
     good, bear, hot = hist(), hist(up=0.985, down=1.01), hist(hot_tail=20)
     hs = universe({"GOOD": good, "BEAR": bear, "HOT": hot, "HELD": good, "HELDBEAR": bear, "MEH": weak()})

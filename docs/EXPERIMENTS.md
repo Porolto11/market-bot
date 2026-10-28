@@ -133,6 +133,19 @@ Variants so far: 37.
 **Not switched.** The 2014-19 gap is 0.7 points, it is the 37th variant, and 12-1 is the literature-backed
 choice. It was added to the live model test instead (track.MODELS "mom_6m", shown in /stats).
 
+## 2026-10-28, cycle 9: a trend SELL on the core ETFs
+
+The question came from the user: after buying VWCE, the bot could say "SELL (bearish)" and "🛒 dip, add" at once.
+
+Test: SPY, $3000, K&H fees, 15% tax at each sale. Variants so far: 38.
+
+| Variant | 2014-19 | 2020- | Trades | Verdict |
+|---|---|---|---|---|
+| hold | +10.6 / -19 | +13.3 / -34 | 1 | baseline for a base ETF |
+| sell when analysis.rate turns bearish, rebuy when bullish | +5.8 / -21 | +6.5 / -30 | 13 / 11 | fail: −5 to −7 pts/yr |
+
+**Shipped:** the core ETFs (scan.CORE) get HOLD instead of a trend SELL. The dip alerts and the 20% stop stay.
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.

@@ -16,7 +16,7 @@ from invest_bot import analysis, fmt, prices, rules, scan
 # after-tax CAGR in both test periods and added a third more trades (docs/EXPERIMENTS.md). Rollback: TRAIL_STOP=0.15.
 STOP = float(os.environ["TRAIL_STOP"]) if os.environ.get("TRAIL_STOP") else None
 HARD_STOP = 0.20  # vs cost: the stop each BUY shows at entry
-CORE = ("CSPX.L", "CNDX.AS", "VVSM.DE", "VWCE.DE")
+CORE = scan.CORE
 DIP, BIG_DIP = -0.08, -0.15  # drawdown from the 52-week high
 DIP_EVERY = 20  # trading days before the same dip is alerted again
 DIP_DEEPER = 0.05  # or sooner, once it is 5 more points deeper than at the last alert
