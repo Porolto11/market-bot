@@ -2,6 +2,29 @@
 
 This combines the 2026-10-27 audit with the "top-notch bot" plan. Each item is one tested commit. When an item changes behaviour, the old behaviour stays the default until the evidence supports switching.
 
+## Now: the analyst upgrade (2026-10-28, from the user's brief)
+**Stable baseline:** the live score and calls as of 2265f35. Experiments, pass rule and every result are in
+docs/EXPERIMENTS.md.
+
+The 5 weakest calls (audit trace: data → `scan.potential` → `scan._call` → `watch.stops`/`dips` → `cloud.message`):
+1. **RSI > 70 → WAIT_FOR_DIP** delayed the best momentum buys and cost about 9 pts/yr in both periods.
+   **Fixed (6431e37):** off by default; `RSI_HOT=70` rolls back.
+2. **The trailing-stop alert** ("15% below its peak → consider selling") was the worst rule tested: 15% from the
+   6-month high cut CAGR from +25% to +5% (2014-19). **Next:** drop the "consider selling" wording; keep the 20%
+   cost guard.
+3. **The daily "trend turned bearish" SELL** whipsaws: a 200-day exit cost the baseline 4-5 pts/yr. **Next:**
+   sell at a monthly review when the stock leaves the top 10. The hold buffer alone passes; it didn't stack with
+   item 1 in 2014-19, so it gets re-tested on top of the new baseline.
+4. **35 of the 100 score points (analyst upside, growth) can't be tested,** and analyst targets run high
+   (docs/RESEARCH.md). Open; the shadow model test in /stats compares the live score with plain momentum.
+5. **Messages lack an exit thesis:** holding period, invalidation, review date. Item 11's exit line is a start.
+   **Next:** after items 2-3, say "held for momentum, reviewed monthly; out if it leaves the top 10 or −20% from
+   cost".
+
+Measured and rejected: buying dips in leaders, 52-week-high proximity, volatility-scaled momentum, a top 3
+instead of 5 (much deeper drawdowns: the buy plan's 3 picks are more concentrated than the backtest), and trend
+exits.
+
 ## P0: correctness (do first)
 1. **Fresh data only.**
    - Drop rows with a NaN close.
