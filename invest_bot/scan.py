@@ -58,7 +58,7 @@ UNIVERSE = {
 CALLS = ("BUY", "WAIT_FOR_DIP", "WAIT", "HOLD", "SELL", "AVOID")  # WAIT: a BUY held back by earnings or news
 ACTIONABLE = ("BUY", "WAIT_FOR_DIP", "SELL")
 BUY_SCORE = 70
-CORE = ("CSPX.L", "CNDX.AS", "VVSM.DE", "VWCE.DE")  # long-term base ETFs: dip alerts (watch.dips), no trend SELL
+CORE = ("CSPX.L", "CNDX.AS", "VVSM.DE", "VWCE.DE", "IWDA.AS")  # long-term base ETFs: dip alerts (watch.dips), no trend SELL
 # RSI above this turns a BUY into WAIT_FOR_DIP. Off by default: the wait cost ~9 pts/yr in both test periods
 # (docs/EXPERIMENTS.md). Rollback: env RSI_HOT=70.
 RSI_HOT = float(os.environ["RSI_HOT"]) if os.environ.get("RSI_HOT") else None
