@@ -29,6 +29,14 @@ The 5 weakest calls (audit trace: data → `scan.potential` → `scan._call` →
    - new plan picks are marked 🆕 (c0aa150);
    - the rating's RSI terms were tested and kept (cycle 6).
 
+8. Done from user requests (2026-10-28):
+   - core ETFs get no trend SELL (cycle 9) and IWDA counts as core;
+   - /refresh for a scan on demand;
+   - core + picks, with /core N, default 50% (cycle 10);
+   - the 2-line plan layout;
+   - '✅ Bought' buttons;
+   - stale counts per exchange in the scan log.
+
 **Ideas not yet tested** (each is cheap and free; the experiment decides):
 - **6-month instead of 12-1 momentum.** Weakness: the ranking may react slowly. It beat 12-1 in both periods
   (EXPERIMENTS), but it was 1 of 25 variants. Test: the live model with 6m only; it must pass the rule; then the

@@ -168,6 +168,28 @@ Method:
 - the core as a user setting, `/core N`;
 - default 50%, which is never the worst ratio here: it keeps most of the return and cuts the worst drop to about −25%.
 
+## 2026-10-28, cycle 11: an early-warning group ("about to become a BUY")
+
+Method: S&P100, monthly snapshots of the BUY-eligible ranking (the live price score with the bullish gate); the
+average 63-day forward return per group.
+
+**Pre-registered rule:** useful only if "rising 6-10" beats "rest" in both periods, and at least 25% reach the top
+5 within 2 months.
+
+Variants so far: 44.
+
+| Group | 2014-19 | 2020- |
+|---|---|---|
+| top 5 (BUY) | +6.0% (n=360) | +9.1% (n=395) |
+| rank 6-10, rising rank | +4.9% (212) | +3.1% (219) |
+| rank 6-10, flat or falling | +5.0% (148) | +4.7% (175) |
+| rest | +3.4% (4153) | +3.3% (4065) |
+
+- Only 31% / 26% of the rising 6-10 group reached the top 5 within 2 months.
+- **Fail:** the rising group was below "rest" in 2020-, and no better than the flat 6-10. Not built: it would be
+  noise.
+- Side result: the top 5 beat the rest clearly in both periods, so the ranking itself carries information.
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.
