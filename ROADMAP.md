@@ -24,8 +24,24 @@ The 5 weakest calls (audit trace: data → `scan.potential` → `scan._call` →
 6. **Found in the live dry run:** the sector cap counted BUYs the cash couldn't buy, so the top tech picks were
    skipped for weaker ones. **Fixed (d631add):** `scan.plan_spread` applies the caps to the real picks.
 
-**Next:** record the conditions at call time (score parts, momentum) with each logged call, so /stats can later
-show which parts of the score actually predict. This is the "learn which analyses are useful" item.
+7. Done:
+   - the call log keeps the score parts and /stats shows which parts predicted (7810efa);
+   - new plan picks are marked 🆕 (c0aa150);
+   - the rating's RSI terms were tested and kept (cycle 6).
+
+**Ideas not yet tested** (each is cheap and free; the experiment decides):
+- **6-month instead of 12-1 momentum.** Weakness: the ranking may react slowly. It beat 12-1 in both periods
+  (EXPERIMENTS), but it was 1 of 25 variants. Test: the live model with 6m only; it must pass the rule; then the
+  shadow test for 3 months.
+- **Concentration warning.** Weakness: the plan's 3 picks carry much deeper drawdowns than 5 (top 3: about −45%
+  vs −30%). Change: the message states it, no rule change. Validate: a message test only.
+- **Earnings-day wait.** Weakness: a BUY becomes WAIT 3 days before earnings, with no evidence. Data: yfinance
+  earnings dates. Test: the forward test only (no point-in-time earnings dates in the backtest). Effort: log a
+  flag, compare in /stats.
+- **The score's 35 untested points.** Wait for parts_test (n ≥ 10 per half at 1 month, about 2-3 months away).
+  If growth or upside does not predict, drop it from the score: a strategy change under the rule.
+- **Survivorship check.** Re-run the key results on an older index list once one is available for free; until then
+  every CAGR here is biased upward.
 
 Measured and rejected: buying dips in leaders, 52-week-high proximity, volatility-scaled momentum, a top 3
 instead of 5 (much deeper drawdowns: the buy plan's 3 picks are more concentrated than the backtest), and trend

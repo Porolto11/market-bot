@@ -112,6 +112,15 @@ overfitting.
 - max drawdown at least 5 points better in both periods;
 - CAGR no more than 2 points worse in either period.
 
+## 2026-10-28, cycle 6: the RSI terms in analysis.rate (baseline = live after 3a1d9f7)
+
+Variants so far: 36.
+
+| Variant | S&P100 2014-19 | S&P100 2020- | Verdict |
+|---|---|---|---|
+| live (rating −1 at RSI > 75, +1 at RSI < 30 in an uptrend) | +17.8 / -36 | +41.8 / -36 | baseline |
+| the rating without the RSI terms | +17.5 / -36 | +42.7 / -34 | fail (2014-19 lower): kept |
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.
