@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import pytest
 
-from invest_bot import cloud, fmt, scan, state
+from invest_bot import cloud, fmt, hours, scan, state
 
 BUD = ZoneInfo("Europe/Budapest")
 TUE = datetime(2026, 10, 27, 6, 45, tzinfo=timezone.utc)
@@ -68,6 +68,19 @@ def go(tmp_path, now=TUE, env=None, sent=None, a=None, **kw):
     code = cloud.run(a or args(tmp_path, **kw), env=env, now=now, download_fn=lambda s, period: market(),
                      info_fn=info, send_fn=lambda t, c, text: sent.append((t, c, text)), out=out)
     return code, sent, out.getvalue()
+
+
+def test_log_counts_stale_symbols_per_exchange_only(tmp_path):
+    _, _, log = go(tmp_path)
+    assert "stale (no close for the last session): 0 {}" in log
+    h = market()
+    h["MOL.BD"] = h["MOL.BD"].iloc[:-3]  # Budapest closes missing
+    out = StringIO()
+    cloud.run(args(tmp_path, force=True), env={"TELEGRAM_TOKEN": TOKEN, "TELEGRAM_CHAT_ID": "42"}, now=TUE,
+              download_fn=lambda s, period: h, info_fn=info, send_fn=lambda *a: None, out=out)
+    line = next(l for l in out.getvalue().splitlines() if l.startswith("stale ("))
+    assert line == f"stale (no close for the last session): 1 {{'{hours.mic_for('MOL.BD')}': 1}}"
+    assert "MOL" not in line.split(":")[1].replace(hours.mic_for("MOL.BD"), "")  # the exchange, never the symbol
 
 
 def test_new_plan_picks_are_marked(tmp_path):

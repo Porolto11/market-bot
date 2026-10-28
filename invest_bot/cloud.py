@@ -42,7 +42,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
-from invest_bot import analysis, fees, fmt, news, prices, scan, state, tax, track, watch
+from invest_bot import analysis, fees, fmt, hours, news, prices, scan, state, tax, track, watch
 from invest_bot.rules import INSTRUMENTS
 
 INDEXES = ("^GSPC", "^STOXX50E")
@@ -496,6 +496,11 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
     except Exception as e:
         return fail(f"price download failed ({type(e).__name__})", token, chat, now, send_fn, out)
     hists, stale = prices.fresh(hists, now)
+    by_mic = {}
+    for s in stale:
+        by_mic[hours.mic_for(s)] = by_mic.get(hours.mic_for(s), 0) + 1
+    print(f"stale (no close for the last session): {len(stale)} "
+          + str(dict(sorted(by_mic.items(), key=str))), file=out)  # counts per exchange only: symbols could reveal holdings
     rates = fx_rates(hists)
     if mine:  # the cash per currency, valued in HUF at today's rates
         portfolio = mine = state.portfolio(st, rates)
