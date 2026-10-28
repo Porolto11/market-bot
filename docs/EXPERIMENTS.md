@@ -58,10 +58,44 @@ Each cell is after-tax CAGR / max drawdown.
 
 Weak support for the core-ETF dip alert. Kept.
 
+## 2026-10-28, cycle 2: the live exits (the entry is now the live rule after 6431e37)
+
+The model of the live entry: the price part of the score, BUY only if bullish (analysis.rate, including its RSI > 75
+penalty), top 5. Exits checked daily:
+- the bearish SELL (rate ≤ 1);
+- the trailing alert (15% below the peak since the buy, while the trend is no longer bullish);
+- the 20% stop vs cost.
+
+Variants so far: 32.
+
+**2a.** With the backtest's monthly top-5 rebalance:
+
+| Variant | S&P100 2014-19 | S&P100 2020- | Verdict |
+|---|---|---|---|
+| all live exits | +24.9 / -26 | +25.8 / -41 | baseline |
+| without the trailing alert | +24.6 / -25 | +26.9 / -40 | fail (2014-19 lower) |
+| without the bearish SELL | +24.8 / -26 | +25.8 / -41 | fail |
+| neither | +24.9 / -24 | +26.9 / -40 | fail (2014-19 not better) |
+
+Under monthly rebalancing the exits hardly matter, because the rebalance sells first. **Correction:** the earlier
+"−20 pts" figure for the trailing stop was for an unconditional stop on plain momentum, not for the live alert.
+
+**2b.** With the live hold rule (no monthly selling; keep a stock until it turns bearish; buy the top bullish into
+free slots). This is the live behaviour, so it is the baseline that decides.
+
+| Variant | S&P100 2014-19 | S&P100 2020- | Trades | Verdict |
+|---|---|---|---|---|
+| live: hold until bearish + trailing + 20% | +16.5 / -35 | +35.4 / -38 | 111 | baseline |
+| the same without the trailing alert | **+17.8 / -36** | **+41.8 / -36** | 75 | **PASS → shipped** |
+| hold while in the top 10 (monthly) instead | +23.7 / -28 | +31.5 / -34 | 189 | fail (2020-: lower CAGR); much better in 2014-19 and on bot US: re-test later |
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.
    - Hypothesis to watch live: BUY calls on high-RSI momentum stocks do no worse than the others in /stats.
-2. **Next candidates,** one at a time, each against the then-current baseline:
-   - the top-10 hold buffer;
-   - removing the daily "trend turned bearish" SELL and the 15% trailing-stop alert, in favour of the monthly review.
+2. **Shipped (cycle 2b):** the trailing "15% below the peak → consider selling" alert is off by default.
+   - The 20% hard stop vs cost stays.
+   - Rollback: `TRAIL_STOP=0.15`.
+3. **Next candidates:**
+   - a monthly review with a top-10 hold rule instead of hold-until-bearish (it failed only on 2020- CAGR);
+   - the exit thesis in the messages.

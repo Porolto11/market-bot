@@ -75,7 +75,7 @@ def signal(c, i, how, n=5):
 
 
 def run(px, univ, how, cap=3000.0, start="2014-01-01", end=None, slip=0.001, stop=None, exit=None):
-    """exit: optional daily rule exit(closes up to today, symbol) -> True to sell at today's close."""
+    """exit: optional daily rule exit(closes up to today, symbol, entry date) -> True to sell at today's close."""
     c, idx = px[univ], px.index
     rebal = {i for i in range(1, len(idx)) if idx[i].month != idx[i - 1].month and idx[i] >= pd.Timestamp(start)
              and (end is None or idx[i] <= pd.Timestamp(end))}
@@ -84,7 +84,7 @@ def run(px, univ, how, cap=3000.0, start="2014-01-01", end=None, slip=0.001, sto
 
     def sell(s, i):
         nonlocal cash, fees, trades
-        sh, cost = pos.pop(s)
+        sh, cost, _ = pos.pop(s)
         p = c[s].iloc[:i + 1].dropna().iloc[-1]
         v = sh * p * (1 - slip)
         f = max(RATE * v, MIN_FEE)
@@ -97,10 +97,10 @@ def run(px, univ, how, cap=3000.0, start="2014-01-01", end=None, slip=0.001, sto
             cash -= TAX * max(0, gains.get(idx[i - 1].year, 0))
         price = c.iloc[i]
         if stop:
-            for s in [s for s, (sh, cost) in pos.items() if price[s] * sh <= cost * (1 - stop)]:
+            for s in [s for s, (sh, cost, _) in pos.items() if price[s] * sh <= cost * (1 - stop)]:
                 sell(s, i)
         if exit:
-            for s in [s for s in pos if exit(c[s].iloc[:i + 1].dropna(), s)]:
+            for s in [s for s in pos if exit(c[s].iloc[:i + 1].dropna(), s, pos[s][2])]:
                 sell(s, i)
         if i not in rebal:
             continue
@@ -112,11 +112,11 @@ def run(px, univ, how, cap=3000.0, start="2014-01-01", end=None, slip=0.001, sto
         for s in new:
             f = max(RATE * per, MIN_FEE)
             if per - f > 0:
-                pos[s] = [(per - f) / (price[s] * (1 + slip)), per]
+                pos[s] = [(per - f) / (price[s] * (1 + slip)), per, idx[i]]
                 cash, fees, trades = cash - per, fees + f, trades + 1
-        vals.append((idx[i], cash + sum(sh * price[s] for s, (sh, _) in pos.items() if not np.isnan(price[s]))))
+        vals.append((idx[i], cash + sum(sh * price[s] for s, (sh, *_) in pos.items() if not np.isnan(price[s]))))
     v = pd.Series(dict(vals))
-    open_gain = sum(sh * c[s].iloc[last_i] - cost for s, (sh, cost) in pos.items())
+    open_gain = sum(sh * c[s].iloc[last_i] - cost for s, (sh, cost, _) in pos.items())
     after = v.iloc[-1] - TAX * max(0, gains.get(v.index[-1].year, 0) + open_gain)
     yrs = (v.index[-1] - v.index[0]).days / 365.25
     return dict(cagr=(v.iloc[-1] / cap) ** (1 / yrs) - 1, cagr_at=(after / cap) ** (1 / yrs) - 1,

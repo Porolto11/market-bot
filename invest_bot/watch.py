@@ -1,17 +1,20 @@
-"""Alerts from the scan's own price histories: on the holdings a trailing stop (15% below the peak close since the
+"""Alerts from the scan's own price histories: on the holdings a trailing stop (off unless TRAIL_STOP; 15% below the peak close since the
 first buy) and a hard stop (HARD_STOP = 20% below the average cost in HUF,
 a crash guard: tools/backtest.py found 12-15% stops cost return, 20-25% about neutral); on the core ETFs a dip of 8% or more below the
 52-week high. Each is a (dedupe key, line) pair; stop keys go into the state's `alerts` list once the message is
 sent, the dip depths into its `dips` dict ({symbol: {d, dd}} of the last dip alert).
 fx_lines: the Monday summary's EUR/HUF and USD/HUF line against the last 3 months.
 """
+import os
 from datetime import date
 
 import numpy as np
 
 from invest_bot import analysis, fmt, prices, rules, scan
 
-STOP = 0.15  # trailing, from the peak
+# Trailing alert, from the peak since the buy. Off by default: with the live hold-until-bearish rule it cut
+# after-tax CAGR in both test periods and added a third more trades (docs/EXPERIMENTS.md). Rollback: TRAIL_STOP=0.15.
+STOP = float(os.environ["TRAIL_STOP"]) if os.environ.get("TRAIL_STOP") else None
 HARD_STOP = 0.20  # vs cost: the stop each BUY shows at entry
 CORE = ("CSPX.L", "CNDX.AS", "VVSM.DE", "VWCE.DE")
 DIP, BIG_DIP = -0.08, -0.15  # drawdown from the 52-week high
@@ -54,7 +57,7 @@ def stops(portfolio, log, hists, items, rates, now, seen) -> list:
         last, i, lines = float(c.iloc[-1]), by.get(s), []
         ccy = i["ccy"] if i else scan.default_ccy(s)
         since = c[c.index.date >= first[s]] if s in first else None
-        if since is not None and len(since) and last <= since.max() * (1 - STOP):
+        if STOP and since is not None and len(since) and last <= since.max() * (1 - STOP):
             peak = float(since.max())
             pct = f"{fmt.tick(s)} is {(1 - last / peak) * 100:.1f}% below its peak since you bought"
             if i and i["score"] >= scan.BUY_SCORE and i["rating"] == "bullish":  # the scan would call it a BUY

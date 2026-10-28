@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from invest_bot import state, watch
+from invest_bot import cloud, state, watch
 from test_cloud import TOKEN, go, market, saved
 
 NOW = datetime(2026, 10, 27, 6, 45, tzinfo=timezone.utc)
@@ -26,6 +26,16 @@ def test_first_buy_of_the_position_held_now():
            buy("AMD", 2, "2026-03-02T10:00:00"), buy("AMD", 1, "2026-04-01T10:00:00"), buy("X", 1, "2026-01-05T10:00:00"),
            buy("X", 1, "2026-01-06T10:00:00", "sell"), dict(t="cash", huf=1, at="2026-01-01")]
     assert watch.first_buys(log) == {"AMD": datetime(2026, 3, 2).date()}
+
+
+def test_no_trailing_alert_by_default(monkeypatch):
+    """docs/EXPERIMENTS.md: the trailing alert cost return under the live hold rule; only the hard stop stays."""
+    monkeypatch.setattr(watch, "STOP", None)
+    h = {"AMD": closes([300, 200, 220, 190, 186.9])}  # 15% below the peak since the buy, 7% below cost
+    log = [buy("AMD", 5, "2026-10-20T10:00:00")]
+    assert watch.stops(pf(), log, h, [], RATES, NOW, []) == []
+    assert watch.stops(pf(85000), log, h, [], RATES, NOW, [])[0][1].endswith("hard stop, consider selling.")
+    assert cloud.stop_why() == "it fell 20% below your cost"
 
 
 def test_trailing_stop_uses_the_peak_since_the_first_buy():
@@ -66,7 +76,7 @@ def test_stop_alert_is_sent_once_a_week(tmp_path):
                   out=StringIO(), news_fn=lambda s: [])
     run()
     assert "🚨 ALERTS\n📉 AAPL −20.0% on Mon 26 Oct\n🛑 AAPL is 20.0% below its peak since you bought" in sent[0]
-    assert "🎯 TODAY'S MOVE\n🛑 Sell AAPL — it hit a stop\nWhy: it fell 15% or more, see 🚨 ALERTS." in sent[0]
+    assert "🎯 TODAY'S MOVE\n🛑 Sell AAPL — it hit a stop\nWhy: it fell 15% below its peak with a weakening trend, or 20% below your cost — see 🚨 ALERTS." in sent[0]
     assert "stop|AAPL|2026-W44" in saved(tmp_path)["alerts"]
     run()
     assert len(sent) == 1  # same week, same calls: nothing new

@@ -56,6 +56,9 @@ WORKERS = 8
 FOOTER = ("Calls from price trend + fundamentals, not certainty. HUF amounts use approximate Yahoo FX; whole "
           "shares only. You place and confirm every order.")
 NO_HOLDINGS = "Market calls only (no holdings data)"
+def stop_why() -> str:
+    hard = f"{watch.HARD_STOP:.0%} below your cost"
+    return f"it fell {watch.STOP:.0%} below its peak with a weakening trend, or {hard}" if watch.STOP else f"it fell {hard}"
 DIST = "💸 pays dividends (taxable)"  # a distributing ETF; the accumulating ones pay nothing out
 TELEGRAM = "https://api.telegram.org/bot{token}/sendMessage"
 SCANS = ((6, 50), (21, 15))  # the weekday scan slots the listener (listen.py) runs, UTC
@@ -237,7 +240,7 @@ def todays_move(buys, sells, stops, switches, watch=()) -> str:
             amount = f" ≈ {_money(i['approx_huf'])}" if i.get("approx_huf") else ""
             return (f"🔴 Sell {i['qty']}× {_label(i)} at ≥ {fmt.price(i['limit'], i['ccy'])}{amount}{tail}\n"
                     "Why: its price trend turned bearish.")
-        return f"🛑 Sell {fmt.tick(stops[0])} — it hit a stop{tail}\nWhy: it fell 15% or more, see 🚨 ALERTS."
+        return f"🛑 Sell {fmt.tick(stops[0])} — it hit a stop{tail}\nWhy: {stop_why()} — see 🚨 ALERTS."
     if switches:
         text, _, y = switches[0]
         return (f"🔁 {text.splitlines()[0]}\nWhy: {fmt.tick(y)} scores far higher and your cash alone "

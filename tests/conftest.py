@@ -2,7 +2,7 @@ import socket
 
 import pytest
 
-from invest_bot import prices, scan
+from invest_bot import prices, scan, watch
 
 _connect = socket.socket.connect
 _getaddrinfo = socket.getaddrinfo
@@ -39,3 +39,4 @@ def rsi_wait(monkeypatch):
     """Most tests were written for the RSI wait: they now cover its rollback setting (env RSI_HOT=70).
     test_scan.test_no_rsi_wait_by_default covers the default."""
     monkeypatch.setattr(scan, "RSI_HOT", 70.0)
+    monkeypatch.setattr(watch, "STOP", 0.15)  # likewise the trailing alert (env TRAIL_STOP=0.15)
