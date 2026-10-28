@@ -70,6 +70,18 @@ def go(tmp_path, now=TUE, env=None, sent=None, a=None, **kw):
     return code, sent, out.getvalue()
 
 
+def test_new_plan_picks_are_marked(tmp_path):
+    _, sent, _ = go(tmp_path)
+    assert "🆕" not in sent[0][2]  # the first message has nothing to compare with
+    st = saved(tmp_path)
+    st["sent"][-1]["calls"] = [c for c in st["sent"][-1]["calls"] if c[0] != "NVDA"]
+    state.save(st, str(tmp_path / "state" / "state.enc"), TOKEN)
+    _, sent, _ = go(tmp_path, sent=sent, force=True)
+    assert "1️⃣ 🆕 Buy 2× Nvidia (NVDA)" in sent[1][2]
+    _, sent, _ = go(tmp_path, sent=sent, force=True)
+    assert "🆕" not in sent[2][2]  # the same pick again: still on, not new
+
+
 def test_no_portfolio_market_calls_only(tmp_path):
     code, sent, log = go(tmp_path)
     assert code == 0 and len(sent) == 1

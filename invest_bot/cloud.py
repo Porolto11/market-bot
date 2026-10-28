@@ -187,8 +187,8 @@ def _fit(i) -> str:
 
 def plan_lines(i, now, n) -> list:
     """A BUY PLAN line: 'Buy N× X at ≤ limit ≈ value HUF + fee F HUF (f%)[ + FR tax 0.4% ≈ T HUF]', then score,
-    chips, deadline, flags."""
-    out = [f"{fmt.NUMBERS[n - 1]} Buy {i['qty']}× {_label(i)} at ≤ {fmt.price(i['limit'], i['ccy'])} ≈ "
+    chips, deadline, flags. 🆕 marks a pick the last sent message did not have (i['new'], set in run)."""
+    out = [f"{fmt.NUMBERS[n - 1]} {'🆕 ' if i.get('new') else ''}Buy {i['qty']}× {_label(i)} at ≤ {fmt.price(i['limit'], i['ccy'])} ≈ "
            f"{_money(i['value_huf'])} + fee {_money(i['fee_huf'])} ({i['fee_pct'] * 100:.2f}%)"
            + (f" + {fees.tax_label(i['symbol'])} ≈ {_money(i['tax_huf'])}" if i.get("tax_huf") else ""),
            "   " + " · ".join([fmt.scored(i["score"], "/100"), *chips(i),
@@ -516,6 +516,9 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
           file=out)
     news.apply(items, headlines, now)
     scan.plan_spread(items, scanned, cash, rates, wallet=wallet)
+    if st["sent"]:  # 🆕 on the picks the last sent message did not have
+        for i in items:
+            i["new"] = [i["symbol"], i["call"]] not in st["sent"][-1]["calls"]
     known = cash if secret_cash is not None or (portfolio or {}).get("cash_huf") is not None else None
     switches = tax.switches(items, portfolio, known, rates, tax.base(st["log"], now.year))
     dipped, dips = watch.dips(scanned, now, st.get("dips") or {})
