@@ -85,7 +85,7 @@ def test_stop_alert_is_sent_once_a_week(tmp_path):
 def test_core_etf_dip_and_big_dip_then_only_deeper_or_20_days_later():
     flat = [100.0] * 260
     h = {"CSPX.L": closes(flat + [90.9]), "CNDX.AS": closes(flat + [84.0]), "VWCE.DE": closes(flat + [93.0]),
-         "IWDA.AS": closes(flat + [80.0])}
+         "VHYL.AS": closes(flat + [80.0])}  # not a core ETF: no alert
     out, last = watch.dips(h, NOW, {})
     assert out == [("dip|CSPX.L|2026-10-27", "🛒 CSPX is 9.1% below its 52-week high — good moment to add if you have cash."),
                    ("dip|CNDX.AS|2026-10-27", "🛒 Big dip: CNDX is 16.0% below its 52-week high — good moment to add if "
