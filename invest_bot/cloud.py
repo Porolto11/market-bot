@@ -444,9 +444,27 @@ def weekly_summary(st, items, regime, holdings, cash_huf, rates, hists, now):
     return "\n".join(lines), new
 
 
-def send_telegram(token, chat_id, text, opener=urllib.request.urlopen):
-    """POST to the Bot API. Errors are re-raised without the token (it is part of the URL)."""
-    data = urllib.parse.urlencode(dict(chat_id=chat_id, text=text, disable_web_page_preview="true")).encode()
+TAP = ("✅ After an order fills, tap it to record the buy (at your limit price; paid less? /undo, then /bought with "
+       "the real price):")
+
+
+def buy_buttons(picks) -> dict:
+    """Telegram inline keyboard: one '✅ Bought Q× TICK' button per plan pick. Its data is the /bought command
+    itself, so a tap runs exactly what typing it would (commands.step)."""
+    return {"inline_keyboard": [[{"text": f"✅ Bought {i['qty']}× {fmt.tick(i['symbol'])}",
+                                  "callback_data": f"/bought {i['symbol']} {i['qty']} {i['limit']}"}] for i in picks]}
+
+
+def send_buttons(token, chat_id, picks, opener=urllib.request.urlopen):
+    send_telegram(token, chat_id, TAP, opener, markup=buy_buttons(picks))
+
+
+def send_telegram(token, chat_id, text, opener=urllib.request.urlopen, markup=None):
+    """POST to the Bot API (markup: an inline keyboard). Errors are re-raised without the token (it is in the URL)."""
+    fields = dict(chat_id=chat_id, text=text, disable_web_page_preview="true")
+    if markup:
+        fields["reply_markup"] = json.dumps(markup)
+    data = urllib.parse.urlencode(fields).encode()
     req = urllib.request.Request(TELEGRAM.format(token=token), data=data, method="POST")
     try:
         with opener(req, timeout=30) as r:
@@ -481,7 +499,8 @@ def fail(reason, token, chat, now, send_fn, out) -> int:
 
 
 def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.info, send_fn=send_telegram,
-        out=sys.stdout, news_fn=prices.news) -> int:
+        out=sys.stdout, news_fn=prices.news, buttons_fn=None) -> int:
+    """buttons_fn(token, chat, picks): the '✅ Bought' buttons after the message (send_buttons in production)."""
     env = os.environ if env is None else env
     now = now or datetime.now(timezone.utc)
     token, chat = (env.get("TELEGRAM_TOKEN") or "").strip(), (env.get("TELEGRAM_CHAT_ID") or "").strip()
@@ -595,6 +614,11 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
     except Exception as e:
         print(str(e).replace(token, "***"), file=out)
         return 1
+    if buttons_fn and (picks := shown(items)[0]):
+        try:
+            buttons_fn(token, chat, picks)
+        except Exception as e:  # a convenience: the plan itself went out
+            print("buttons: " + str(e).replace(token, "***"), file=out)
     st["sent"] = [*st["sent"], dict(calls=current, at=now.isoformat(timespec="seconds"))][-state.MAX_SENT:]
     track.log(st, current, now.date(), hists, by={i["symbol"]: i for i in items})
     st["alerts"] = [*seen, *(f"{s}|{d}" for s, _, d in fresh), *(k for k, _ in watched if k.startswith("stop|"))
@@ -627,7 +651,7 @@ def parse_args(argv=None):
 
 
 def main(argv=None) -> int:
-    return run(parse_args(argv))
+    return run(parse_args(argv), buttons_fn=send_buttons)
 
 
 if __name__ == "__main__":

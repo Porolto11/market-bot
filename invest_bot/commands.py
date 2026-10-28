@@ -24,6 +24,7 @@ from invest_bot import cloud, fees, fmt, mnb, precheck, prices, rules, scan, sta
 UPDATES = "https://api.telegram.org/bot{token}/getUpdates?{query}"
 TOP = 10
 SCAN_EVERY = timedelta(minutes=10)  # /refresh at most this often
+MAX_TAPS = 200  # '✅ Bought' taps remembered against a double tap
 HELP = """🤖 Invest Bot commands
 
 📝 Record
@@ -383,7 +384,7 @@ def ours(msg, chat) -> bool:
 
 def get_updates(token, offset, opener=urllib.request.urlopen, limit=100, timeout=0) -> list:
     """New updates at or after offset; timeout > 0 long-polls (Telegram holds the request up to that many seconds)."""
-    query = urllib.parse.urlencode(dict(offset=offset, limit=limit, timeout=timeout, allowed_updates='["message"]'))
+    query = urllib.parse.urlencode(dict(offset=offset, limit=limit, timeout=timeout, allowed_updates='["message","callback_query"]'))
     try:
         with opener(UPDATES.format(token=token, query=query), timeout=timeout + 30) as r:
             body = json.loads(r.read().decode("utf-8") or "{}")
@@ -436,8 +437,19 @@ def step(st, token, chat, now, folder, fetch, send_fn=cloud.send_telegram, downl
     for u in fetch(st["offset"]):
         st["offset"] = u["update_id"] + 1
         msg = u.get("message") or {}
+        cb = u.get("callback_query")
+        if cb:  # a '✅ Bought' button (cloud.buy_buttons): its data is the /bought command, same owner check
+            msg = dict(cb.get("message") or {}, **{"from": cb.get("from"), "text": cb.get("data")})
         if not ours(msg, chat):
             continue
+        if cb:
+            key = f"{msg.get('message_id')}|{cb.get('data')}"
+            if key in st.setdefault("taps", []):
+                reply = "Already recorded: /holdings shows it (/undo removes the last entry)."
+                if not send(reply):
+                    st["outbox"].append(reply)
+                continue
+            st["taps"] = [*st["taps"], key][-MAX_TAPS:]
         try:
             reply = handle(st, msg["text"], now, download_fn, info_fn)
         except Exception as e:  # one bad command must not stop the rest

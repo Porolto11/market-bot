@@ -174,7 +174,8 @@ def another_run(env, opener=urllib.request.urlopen, out=None) -> bool:
 
 
 def _scan(path, force=False) -> int:
-    return cloud.run(cloud.parse_args(["--state", path, *(["--force"] if force else [])]))
+    return cloud.run(cloud.parse_args(["--state", path, *(["--force"] if force else [])]),
+                     buttons_fn=cloud.send_buttons)
 
 
 def _no_offset(dump) -> str:

@@ -1,6 +1,7 @@
 import base64
 import json
 import subprocess
+import urllib.parse
 from argparse import Namespace
 from datetime import datetime, timezone
 from io import StringIO
@@ -246,6 +247,33 @@ def test_missing_secrets_prints_only_and_keeps_state(tmp_path):
     code, sent, log = go(tmp_path, env={})
     assert code == 0 and not sent and "message printed only" in log and cloud.FOOTER in log
     assert not (tmp_path / "state" / "state.enc").exists()
+
+
+def test_bought_buttons_follow_the_plan(tmp_path):
+    pressed, out = [], StringIO()
+    code = cloud.run(args(tmp_path), env=SECRETS, now=TUE, download_fn=lambda s, period: market(), info_fn=info,
+                     send_fn=lambda t, c, text: None, out=out, buttons_fn=lambda t, c, picks: pressed.append(picks))
+    assert code == 0 and len(pressed) == 1 and [i["symbol"] for i in pressed[0]] == ["NVDA"]
+    kb = cloud.buy_buttons(pressed[0])["inline_keyboard"]
+    nv = pressed[0][0]
+    assert kb == [[{"text": f"✅ Bought {nv['qty']}× NVDA", "callback_data": f"/bought NVDA {nv['qty']} {nv['limit']}"}]]
+    assert all(len(b["callback_data"].encode()) <= 64 for row in kb for b in row)  # Telegram's limit
+
+    def broken(*a):
+        raise RuntimeError("Telegram down")
+    out = StringIO()
+    code = cloud.run(args(tmp_path, force=True), env=SECRETS, now=TUE, download_fn=lambda s, period: market(),
+                     info_fn=info, send_fn=lambda t, c, text: None, out=out, buttons_fn=broken)
+    assert code == 0 and "buttons: Telegram down" in out.getvalue()  # the plan itself went out
+
+    seen = {}
+
+    def opener(req, timeout):
+        seen["data"] = req.data.decode()
+        raise OSError("offline")
+    with pytest.raises(RuntimeError):
+        cloud.send_buttons(TOKEN, "42", pressed[0], opener=opener)
+    assert "reply_markup=" in seen["data"] and "callback_data" in urllib.parse.unquote_plus(seen["data"])
 
 
 def test_token_never_in_output(tmp_path, capsys):

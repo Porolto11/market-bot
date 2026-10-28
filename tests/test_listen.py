@@ -184,6 +184,22 @@ def test_due_slot_is_done_when_marked_or_a_scan_ran_after_it():
     assert listen.due_slot(dict(scan=dict(at="2026-10-26T21:15:10+00:00")), t + timedelta(hours=1)) == t
 
 
+def tap(uid, data, chat=CHAT, message_id=77):
+    return {"update_id": uid, "callback_query": {
+        "id": str(uid), "from": {"id": int(chat)}, "data": data,
+        "message": {"message_id": message_id, "chat": {"id": int(chat), "type": "private"}}}}
+
+
+def test_bought_button_records_once_and_only_from_the_owner(tmp_path):
+    fake = Fake(TUE, [(TUE, tap(1, "/bought MOL 10 3000")), (TUE, tap(2, "/bought MOL 10 3000")),
+                      (TUE, tap(3, "/bought MOL 10 3000", chat="666"))])
+    run(tmp_path, fake)
+    st = load(tmp_path)
+    assert [(e["t"], e["sym"], e["qty"]) for e in st["log"] if "sym" in e] == [("buy", "MOL.BD", 10)]  # once
+    assert len(fake.sent) == 2 and fake.sent[1].startswith("Already recorded")  # the stranger got nothing
+    assert st["taps"] == ["77|/bought MOL 10 3000"]
+
+
 def test_refresh_runs_one_forced_scan_right_after_the_reply(tmp_path):
     noon = at(2026, 10, 27, 12, 0)
     fake = Fake(noon, [(noon, msg(1, "/refresh"))])

@@ -55,7 +55,7 @@ def needed(folder, token, opener=None, now=None) -> bool:
     if overdue(folder, now or datetime.now(timezone.utc)):
         return True
     query = urllib.parse.urlencode(dict(offset=_read(folder, "offset.txt", "0"), limit=1, timeout=0,
-                                        allowed_updates='["message"]'))
+                                        allowed_updates='["message","callback_query"]'))
     try:
         with (opener or urllib.request.urlopen)(URL.format(token=token, query=query), timeout=20) as r:
             body = json.loads(r.read().decode("utf-8") or "{}")
