@@ -107,6 +107,14 @@ def test_shadow_logs_top_picks_once_per_episode_and_scores():
     assert "🧪 Model test" in track.stats(st)
 
 
+def test_shadow_includes_six_month_momentum():
+    h = {"UP": series(1.01), "CSPX.L": series(1.0, base=500)}
+    st = {}
+    track.shadow(st, [dict(symbol="UP", score=90, mom=50, mom_6m=0.4)], D0, h)
+    assert sorted(c["m"] for c in st["shadow"]) == ["mom", "mom_6m", "score"]
+    assert "6-month momentum" in "\n".join(track.model_test(st))
+
+
 def test_mom_only_trend_filter():
     from invest_bot import scan
     moms = dict(long=[0.1, 0.2, 0.3])

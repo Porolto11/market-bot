@@ -121,6 +121,18 @@ Variants so far: 36.
 | live (rating −1 at RSI > 75, +1 at RSI < 30 in an uptrend) | +17.8 / -36 | +41.8 / -36 | baseline |
 | the rating without the RSI terms | +17.5 / -36 | +42.7 / -34 | fail (2014-19 lower): kept |
 
+## 2026-10-28, cycle 8: rank by 6-month momentum only (baseline = live after 3a1d9f7)
+
+Variants so far: 37.
+
+| Variant | S&P100 2014-19 | S&P100 2020- | bot US 2014-19 | bot US 2020- | Verdict |
+|---|---|---|---|---|---|
+| live: 20 pct(12-1) + 20 pct(6m) + trend | +17.8 / -36 | +41.8 / -36 | +24.1 / -39 | +42.9 / -42 | baseline |
+| 40 pct(6m) + trend | +18.5 / -37 | +44.8 / -37 | +23.2 / -38 | +45.9 / -42 | passes narrowly |
+
+**Not switched.** The 2014-19 gap is 0.7 points, it is the 37th variant, and 12-1 is the literature-backed
+choice. It was added to the live model test instead (track.MODELS "mom_6m", shown in /stats).
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.

@@ -22,7 +22,8 @@ MAX_CALLS = 500
 MIN_N = 10
 SHADOW_N = 5
 EPISODE = 20  # weekdays
-MODELS = {"score": "today's score", "mom": "plain momentum"}
+# item key -> name. mom_6m: passed the backtest rule only narrowly (docs/EXPERIMENTS.md cycle 8), so it is tested live
+MODELS = {"score": "today's score", "mom": "plain momentum", "mom_6m": "6-month momentum"}
 
 
 def _close(hist):
