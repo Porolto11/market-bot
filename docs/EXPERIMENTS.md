@@ -190,6 +190,63 @@ Variants so far: 44.
   noise.
 - Side result: the top 5 beat the rest clearly in both periods, so the ranking itself carries information.
 
+## 2026-11-01, Pine round 1: the TradingView strategy, one symbol at a time
+
+Method:
+- Each S&P100 stock plus SPY, traded alone by the Pine rules;
+- costs 0.24% + 0.1% per side, no tax; median across about 100 symbols.
+
+**Candidates:** from a web search (time-series momentum with volatility scaling, Moskowitz-Ooi-Pedersen 2012;
+Faber's monthly rule; ATR chandelier exits). Pass rule as above.
+
+Variants so far: 54.
+
+| Variant | 2014-19 median CAGR / maxDD | 2020- | Verdict |
+|---|---|---|---|
+| baseline (sell on the first bearish day) | +5.2 / -29 | +2.4 / -37 | baseline |
+| sell after 2 / 3 / 5 / 10 bearish days in a row | +5.5, +6.4, **+6.6**, +6.5 / -29..-30 | +3.4, +3.0, **+3.4**, +2.8 / -38..-40 | PASS for every N 2-10 (robust) → 5 shipped |
+| 15 days | +7.0 / -28 | +3.3 / -41 | fail (drawdown) |
+| monthly signal checks (Faber) | +6.0 / -30 | +2.3 / -38 | fail |
+| volatility-targeted size (20% target) | +5.4 / -25 | +0.7 / -31 | fail: smaller drops, much less return |
+| ATR(22) x3 chandelier exit | -3.2 / -42 | -3.7 / -50 | fail badly |
+| buy & hold the same stock | +12.9 / -30 | +11.4 / -45 | survivor-biased; still a warning |
+
+**Warning.** Timing a single random stock in and out loses heavily to holding it. The script's value is on stocks the
+bot already ranks at the top.
+
+**Bot round 2:** the same confirmation on the Telegram bot's live model.
+- Results: 1 day (live) +17.8 / -36 and +41.8 / -36; 3 days +16.8 / -34 and +42.5 / -35; 5 days +16.3 / -36 and
+  +41.9 / -37; 10 days +17.7 / -36 and +42.4 / -36.
+- **Fail:** all are lower in 2014-19. The bot keeps its first-day SELL; in a ranked portfolio a quick sell frees cash
+  for the next top pick.
+- Variants so far: 57.
+
+**Pine round 3** (baseline = 5-day confirmation). Each pair is 2014-19, then 2020-.
+
+| Variant | 2014-19 | 2020- | Verdict |
+|---|---|---|---|
+| beat SPY's 12-1 to buy | +5.6 / -25 | +3.3 / -39 | fail (less return): stays off |
+| 3 bullish days to buy | +6.0 / -30 | +2.8 / -39 | fail |
+| Donchian 55/20 breakout | -0.4 / -29 | +0.9 / -36 | fail badly |
+
+Variants so far: 60.
+
+**Pine round 4: holding longer** (baseline = 5-day confirmation).
+
+| Variant | 2014-19 | 2020- | Verdict |
+|---|---|---|---|
+| exit only at the 20% stop vs the entry (re-buy when bullish) | **+11.9 / -29** | **+7.7 / -41** | **PASS, large → the Pine default ("Hold winners")** |
+| exit after 20 bearish days in a row | +8.1 / -28 | +3.7 / -40 | pass, smaller |
+| absolute momentum (sell when 12-1 < 0, Antonacci) | +5.3 / -29 | +2.3 / -41 | fail |
+| buy & hold | +12.9 / -30 | +11.4 / -45 | reference |
+
+- **Caveat:** the survivorship bias favours holding, so the true gap is smaller.
+- The trend exit stays selectable.
+- **Not applied to the bot:** its ranked portfolio needs exits to rotate into new top picks (bot round 2: the
+  quick SELL wins there).
+
+Variants so far: 63.
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.

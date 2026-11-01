@@ -3,7 +3,9 @@
 // The same per-stock rules as the Telegram bot (all tested in docs/EXPERIMENTS.md):
 //   BUY  = the trend score (invest_bot/analysis.rate) is bullish (>= 3 of 4) and the 12-1 momentum is positive
 //          (no "wait for a dip": waiting cost ~9 pts/yr; no buying dips in leaders: it lost money)
-//   SELL = the trend is bearish (<= 1) 5 days in a row (fewer false sells), or the close is 20% below the entry
+//   SELL = the close is 20% below the entry ("Hold winners", the default: on the median S&P 100 stock it earned
+//          +11.9%/yr vs +6.6% for a trend exit in 2014-19, +7.7% vs +3.4% in 2020-26, same drawdowns; Pine round 4)
+//          or, with "Trend exit", also after 5 bearish days in a row
 //   Core ETF mode (VWCE, CSPX, IWDA): hold, no trend exit (trend in/out cost 5-7 pts/yr on SPY), ADD on dips of 8%+
 // Panels: this chart's status + a position sizer (K&H fee, whole shares) + the paper-trade stats; and a watchlist
 // ranked by 12-1 momentum like the bot's ranking (top-ranked stocks did best: EXPERIMENTS cycle 11).
@@ -20,7 +22,9 @@ stopPct  = input.float(20, "Stop below the entry (%)", minval = 1, group = grpR)
 coreMode = input.bool(false, "Core ETF mode (VWCE, CSPX, IWDA): hold, no trend exit, ADD on dips", group = grpR)
 coreStop = input.bool(true, "Core mode: keep the stop", group = grpR)
 minMom   = input.float(0, "Min 12-1 momentum to buy (%)", group = grpR) / 100
-confirmN = input.int(5, "Sell after this many bearish days in a row", minval = 1, group = grpR,
+exitMode = input.string("Hold winners (stop only)", "Exit style", options = ["Hold winners (stop only)", "Trend exit"], group = grpR,
+     tooltip = "Hold winners: sell only at the stop below the entry. Trend exit: also sell after N bearish days in a row. Hold winners earned about twice as much in both test periods (docs/EXPERIMENTS.md, Pine round 4)")
+confirmN = input.int(5, "Trend exit: sell after this many bearish days in a row", minval = 1, group = grpR,
      tooltip = "Fewer false sells. Every setting from 2 to 10 beat 1 day on the median S&P 100 stock in 2014-19 and 2020-26 (docs/EXPERIMENTS.md, Pine round 1)")
 grpX     = "Extra filter (not in the bot, not backtested)"
 useRS    = input.bool(false, "Only buy when beating the benchmark (12-1 momentum)", group = grpX)
@@ -68,7 +72,7 @@ stopPx   = inPos ? entryPx * (1 - stopPct) : na
 stopHit  = inPos and (not coreMode or coreStop) and close <= stopPx
 var int bearRun = 0
 bearRun := bearish ? bearRun + 1 : 0  // bearish days in a row
-trendOut = inPos and not coreMode and bearRun >= confirmN
+trendOut = inPos and not coreMode and exitMode == "Trend exit" and bearRun >= confirmN
 buyOk    = ready and (coreMode or (bullish and m121 > minMom and (not useRS or rs > 0)))
 buyNow   = not inPos and buyOk
 sellNow  = stopHit or trendOut
