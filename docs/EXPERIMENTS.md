@@ -247,6 +247,20 @@ Variants so far: 60.
 
 Variants so far: 63.
 
+**Pine round 5: the stop distance for "Hold winners"** (baseline = the 20% stop).
+
+| Variant | 2014-19 | 2020- |
+|---|---|---|
+| 20% stop | +11.9 / -29 | +7.7 / -41 |
+| 25% / 30% / 40% stop | +11.9 / -29, +12.4 / -30, +12.4 / -30 | +7.7 / -44, +7.6 / -45, +8.3 / -45 |
+| no stop | +12.4 / -30 | +11.3 / -45 |
+
+- **Fail:** every alternative has 3-4 points deeper drawdowns in 2020-.
+- The 20% stop stays: it guards against collapses this survivor-only universe cannot show.
+
+Variants so far: 67. **Pine search paused:** further tweaks on the same 2014-2026 data would mostly fit noise. The
+next evidence is forward: the Strategy Tester on new bars, and /paper.
+
 ## Decisions
 1. **Shipped:** the RSI "overheated → wait for a dip" rule is off by default (`RSI_HOT` unset).
    - Rollback: set the `RSI_HOT=70` env var.
