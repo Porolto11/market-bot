@@ -1,0 +1,51 @@
+//@version=6
+// Market Bot rules for TradingView (paste into the Pine Editor, "Add to chart", use the DAILY timeframe).
+// The same per-stock rules as the Telegram bot: invest_bot/analysis.rate (trend score), the 12-1 momentum,
+// watch.HARD_STOP (20% below the entry) and the core-ETF rule (no trend exit). The Strategy Tester paper-trades
+// them on this one chart with the K&H 0.24% commission (the 3.49 minimum and the 1% FX are not modelled).
+// NOT the bot's strategy: the bot's edge is RANKING ~80 symbols and holding the top ones, which one chart cannot
+// do. On a single index ETF, trend in/out did worse than holding (docs/EXPERIMENTS.md, cycle 9): use core mode.
+strategy("Market Bot rules (paper)", overlay = true, initial_capital = 1000000, currency = currency.NONE,
+     default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
+     commission_type = strategy.commission.percent, commission_value = 0.24, process_orders_on_close = true)
+
+stopPct  = input.float(20, "Hard stop below the entry (%)", minval = 1) / 100
+coreMode = input.bool(false, "Core ETF mode: no trend exit (VWCE, CSPX, IWDA)")
+minMom   = input.float(0, "Min 12-1 momentum to enter (%)") / 100
+
+sma50  = ta.sma(close, 50)
+sma200 = ta.sma(close, 200)
+rsi    = ta.rsi(close, 14)
+mom6   = close / close[126] - 1
+mom12  = close / close[252] - 1
+mom121 = close[21] / close[252] - 1  // 12-month momentum without the last month
+
+// analysis.rate: +1 above the 200-day, +1 50-day above 200-day, +1 / +1 positive 6- and 12-month momentum,
+// -1 RSI above 75, +1 RSI below 30 in an uptrend. Bullish >= 3, bearish <= 1.
+score   = (close > sma200 ? 1 : 0) + (sma50 > sma200 ? 1 : 0) + (mom6 > 0 ? 1 : 0) + (mom12 > 0 ? 1 : 0) - (rsi > 75 ? 1 : 0) + (rsi < 30 and close > sma200 ? 1 : 0)
+ready   = bar_index >= 252
+bullish = ready and score >= 3
+bearish = ready and score <= 1
+
+inPos  = strategy.position_size > 0
+stopPx = inPos ? strategy.position_avg_price * (1 - stopPct) : na
+
+if not inPos and bullish and mom121 > minMom
+    strategy.entry("BUY", strategy.long)
+if inPos and ((not coreMode and bearish) or close <= stopPx)
+    strategy.close("BUY", comment = close <= stopPx ? "stop" : "trend bearish")
+
+plot(sma50, "SMA 50", color = color.blue)
+plot(sma200, "SMA 200", color = color.orange, linewidth = 2)
+plot(stopPx, "Stop (-20%)", color = color.red, style = plot.style_linebr)
+bgcolor(bullish ? color.new(color.green, 90) : bearish ? color.new(color.red, 90) : na)
+
+var table info = table.new(position.top_right, 2, 3, border_width = 1)
+if barstate.islast
+    verdict = bullish ? "bullish" : bearish ? "bearish" : "neutral"
+    table.cell(info, 0, 0, "Trend score", bgcolor = color.new(color.gray, 70))
+    table.cell(info, 1, 0, str.tostring(score) + "/4 " + verdict)
+    table.cell(info, 0, 1, "12-1 momentum", bgcolor = color.new(color.gray, 70))
+    table.cell(info, 1, 1, str.tostring(mom121 * 100, "#.0") + "%")
+    table.cell(info, 0, 2, "RSI 14", bgcolor = color.new(color.gray, 70))
+    table.cell(info, 1, 2, str.tostring(rsi, "#"))
