@@ -5,10 +5,11 @@
 //          (no "wait for a dip": waiting cost ~9 pts/yr; no buying dips in leaders: it lost money)
 //   SELL = the trend turns bearish (<= 1), or the close is 20% below the entry (watch.HARD_STOP)
 //   Core ETF mode (VWCE, CSPX, IWDA): hold, no trend exit (trend in/out cost 5-7 pts/yr on SPY), ADD on dips of 8%+
-// The Strategy Tester paper-trades it on this chart with the K&H 0.24% commission (not the 3.49 minimum or 1% FX).
+// Panels: this chart's status + a position sizer (K&H fee, whole shares) + the paper-trade stats; and a watchlist
+// ranked by 12-1 momentum like the bot's ranking (top-ranked stocks did best: EXPERIMENTS cycle 11).
+// The Strategy Tester paper-trades this chart with the K&H 0.24% commission (not the 3.49 minimum or 1% FX).
 // Alerts: "Create alert" -> condition: this strategy -> "alert() function calls only".
-// Limit: one chart cannot RANK ~80 symbols, which is where the Telegram bot's edge comes from. Use this to see and
-// time the bot's picks, not as a strategy on its own.
+// Limit: the watchlist ranks only the symbols you enter; the Telegram bot ranks ~80 and adds a core ETF.
 strategy("Market Bot signals", overlay = true, initial_capital = 1000000, currency = currency.NONE,
      default_qty_type = strategy.percent_of_equity, default_qty_value = 100, commission_type = strategy.commission.percent,
      commission_value = 0.24, process_orders_on_close = true, max_labels_count = 500)
@@ -22,22 +23,38 @@ minMom   = input.float(0, "Min 12-1 momentum to buy (%)", group = grpR) / 100
 grpX     = "Extra filter (not in the bot, not backtested)"
 useRS    = input.bool(false, "Only buy when beating the benchmark (12-1 momentum)", group = grpX)
 bench    = input.symbol("AMEX:SPY", "Benchmark", group = grpX)
+grpS     = "Position sizer (K&H)"
+budget   = input.float(300000, "Budget for this pick (HUF)", minval = 0, group = grpS)
+grpW     = "Watchlist ranking (your holdings and the bot's picks)"
+showW    = input.bool(true, "Show the watchlist ranking", group = grpW)
+w1       = input.symbol("NASDAQ:MU", "1", group = grpW)
+w2       = input.symbol("NYSE:TSM", "2", group = grpW)
+w3       = input.symbol("NASDAQ:AMD", "3", group = grpW)
+w4       = input.symbol("NYSE:ANET", "4", group = grpW)
+w5       = input.symbol("NASDAQ:NVDA", "5", group = grpW)
+w6       = input.symbol("NYSE:LLY", "6", group = grpW)
+w7       = input.symbol("NASDAQ:AMAT", "7", group = grpW)
+w8       = input.symbol("XETR:VWCE", "8", group = grpW)
 showLbl  = input.bool(true, "Show BUY / SELL / ADD labels", group = "Display")
 
-// ── Indicators
+// ── The bot's numbers for the current symbol (also used for each watchlist symbol)
+trendScore() =>
+    s50 = ta.sma(close, 50)
+    s200 = ta.sma(close, 200)
+    r = ta.rsi(close, 14)
+    (close > s200 ? 1 : 0) + (s50 > s200 ? 1 : 0) + (close / close[126] > 1 ? 1 : 0) + (close / close[252] > 1 ? 1 : 0) - (r > 75 ? 1 : 0) + (r < 30 and close > s200 ? 1 : 0)
+mom121() => close[21] / close[252] - 1  // 12-month momentum without the last month
+both() => [trendScore(), mom121()]
+
 sma50  = ta.sma(close, 50)
 sma200 = ta.sma(close, 200)
-rsi    = ta.rsi(close, 14)
-mom6   = close / close[126] - 1
-mom12  = close / close[252] - 1
-mom121 = close[21] / close[252] - 1  // 12-month momentum without the last month
-bMom   = request.security(bench, timeframe.period, close[21] / close[252] - 1)
-rs     = mom121 - bMom  // > 0: stronger than the benchmark
+score  = trendScore()
+m121   = mom121()
+bMom   = request.security(bench, "D", mom121(), ignore_invalid_symbol = true)
+bhBase = ta.valuewhen(bar_index == 252, close, 0)  // buy & hold from the first bar with signals
+rs     = m121 - bMom  // > 0: stronger than the benchmark
 dd     = close / ta.highest(close, 252) - 1  // distance from the 52-week high
 
-// analysis.rate: +1 above the 200-day, +1 50-day above the 200-day, +1 / +1 positive 6- and 12-month momentum,
-// -1 RSI above 75, +1 RSI below 30 in an uptrend. Bullish >= 3, bearish <= 1.
-score   = (close > sma200 ? 1 : 0) + (sma50 > sma200 ? 1 : 0) + (mom6 > 0 ? 1 : 0) + (mom12 > 0 ? 1 : 0) - (rsi > 75 ? 1 : 0) + (rsi < 30 and close > sma200 ? 1 : 0)
 ready   = bar_index >= 252
 bullish = ready and score >= 3
 bearish = ready and score <= 1
@@ -48,7 +65,7 @@ entryPx  = strategy.position_avg_price
 stopPx   = inPos ? entryPx * (1 - stopPct) : na
 stopHit  = inPos and (not coreMode or coreStop) and close <= stopPx
 trendOut = inPos and not coreMode and bearish
-buyOk    = ready and (coreMode or (bullish and mom121 > minMom and (not useRS or rs > 0)))
+buyOk    = ready and (coreMode or (bullish and m121 > minMom and (not useRS or rs > 0)))
 buyNow   = not inPos and buyOk
 sellNow  = stopHit or trendOut
 
@@ -64,14 +81,14 @@ if coreMode and inPos and dd <= -0.08
 if dd > -0.08
     lastAddDD := na
 
-pct(x) => (x >= 0 ? "+" : "") + str.tostring(x * 100, "0.0") + "%"
+pct(x) => na(x) ? "n/a" : (x >= 0 ? "+" : "") + str.tostring(x * 100, "0.0") + "%"
 px(x) => str.tostring(x, format.mintick)
+huf(x) => na(x) ? "n/a (no FX rate)" : str.tostring(math.round(x / 1000) * 1000, "#,###") + " HUF"
 
 if buyNow
     strategy.entry("BUY", strategy.long)
-    msg = "BUY " + px(close) + "\nstop " + px(close * (1 - stopPct))
     if showLbl
-        label.new(bar_index, low, msg, yloc = yloc.belowbar, style = label.style_label_up, color = color.new(color.green, 0), textcolor = color.white, size = size.small)
+        label.new(bar_index, low, "BUY " + px(close) + "\nstop " + px(close * (1 - stopPct)), yloc = yloc.belowbar, style = label.style_label_up, color = color.new(color.green, 0), textcolor = color.white, size = size.small)
     alert(syminfo.ticker + " BUY at " + px(close) + ", stop " + px(close * (1 - stopPct)), alert.freq_once_per_bar_close)
 if sellNow
     why = stopHit ? "stop " + pct(-stopPct) : "trend bearish"
@@ -91,21 +108,79 @@ plot(sma200, "SMA 200", color = color.new(color.orange, 0), linewidth = 2)
 plot(stopPx, "Stop", color = color.red, style = plot.style_linebr, linewidth = 2)
 bgcolor(bullish ? color.new(color.green, 92) : bearish ? color.new(color.red, 92) : na)
 
-// ── Status panel
-var table info = table.new(position.top_right, 2, 6, border_width = 1, frame_color = color.gray, frame_width = 1)
+// ── Position sizer: whole shares for the budget at the live FX (+1% K&H conversion), the K&H fee
+fxSym   = syminfo.currency == "HUF" ? "FX_IDC:EURHUF" : "FX_IDC:" + syminfo.currency + "HUF"  // always a valid symbol
+fxRaw   = request.security(fxSym, "D", close, ignore_invalid_symbol = true)
+fx      = syminfo.currency == "HUF" ? 1.0 : fxRaw
+minFee  = syminfo.currency == "HUF" ? 349.0 : 3.49  // per order, in the instrument currency (EUR/USD markets)
+shares  = math.floor(budget / (close * fx * 1.01))
+value   = shares * close
+fee     = math.max(value * 0.0024, minFee)
+feePct  = value > 0 ? fee / value : na
+
+// ── Status panel (top right)
+var table info = table.new(position.top_right, 2, 12, border_width = 1, frame_color = color.gray, frame_width = 1)
 if barstate.islast
     status = inPos ? "IN TRADE " + pct(close / entryPx - 1) : buyOk ? "BUY now" : bearish ? "AVOID (bearish)" : "WAIT (trend not up)"
     sCol   = inPos ? color.new(color.blue, 20) : buyOk ? color.new(color.green, 20) : bearish ? color.new(color.red, 20) : color.new(color.gray, 40)
     head   = color.new(color.gray, 75)
+    closed = strategy.closedtrades
     table.cell(info, 0, 0, "Status", bgcolor = head)
     table.cell(info, 1, 0, status, bgcolor = sCol, text_color = color.white)
     table.cell(info, 0, 1, "Trend score", bgcolor = head)
     table.cell(info, 1, 1, str.tostring(score) + "/4 " + (bullish ? "bullish" : bearish ? "bearish" : "neutral"))
     table.cell(info, 0, 2, "12-1 momentum", bgcolor = head)
-    table.cell(info, 1, 2, pct(mom121))
+    table.cell(info, 1, 2, pct(m121))
     table.cell(info, 0, 3, "vs benchmark", bgcolor = head)
     table.cell(info, 1, 3, pct(rs))
     table.cell(info, 0, 4, inPos ? "Stop" : "Stop if bought now", bgcolor = head)
     table.cell(info, 1, 4, px(inPos ? stopPx : close * (1 - stopPct)))
     table.cell(info, 0, 5, "From 52w high", bgcolor = head)
     table.cell(info, 1, 5, pct(dd))
+    table.cell(info, 0, 6, "Budget " + huf(budget), bgcolor = head)
+    table.cell(info, 1, 6, shares > 0 ? str.tostring(shares) + "× ≈ " + huf(value * fx * 1.01) : "1 share ≈ " + huf(close * fx * 1.01))
+    table.cell(info, 0, 7, "K&H fee", bgcolor = head)
+    table.cell(info, 1, 7, shares > 0 ? str.tostring(feePct * 100, "0.00") + "%" + (feePct > 0.01 ? " ⚠ over 1%: buy more or skip" : "") : "n/a", text_color = feePct > 0.01 ? color.red : chart.fg_color)
+    table.cell(info, 0, 8, "Paper trades", bgcolor = head)
+    table.cell(info, 1, 8, str.tostring(closed) + " closed" + (inPos ? " + 1 open" : ""))
+    table.cell(info, 0, 9, "Win rate", bgcolor = head)
+    table.cell(info, 1, 9, closed > 0 ? str.tostring(strategy.wintrades * 100.0 / closed, "0") + "%" : "n/a")
+    table.cell(info, 0, 10, "Net result", bgcolor = head)
+    table.cell(info, 1, 10, pct((strategy.netprofit + strategy.openprofit) / strategy.initial_capital))
+    table.cell(info, 0, 11, "Buy & hold", bgcolor = head)
+    table.cell(info, 1, 11, pct(close / bhBase - 1))
+
+// ── Watchlist ranking (bottom right): 12-1 momentum, best first; ⭐ = the top 3 in the buy zone
+[s1, m1] = request.security(w1, "D", both(), ignore_invalid_symbol = true)
+[s2, m2] = request.security(w2, "D", both(), ignore_invalid_symbol = true)
+[s3, m3] = request.security(w3, "D", both(), ignore_invalid_symbol = true)
+[s4, m4] = request.security(w4, "D", both(), ignore_invalid_symbol = true)
+[s5, m5] = request.security(w5, "D", both(), ignore_invalid_symbol = true)
+[s6, m6] = request.security(w6, "D", both(), ignore_invalid_symbol = true)
+[s7, m7] = request.security(w7, "D", both(), ignore_invalid_symbol = true)
+[s8, m8] = request.security(w8, "D", both(), ignore_invalid_symbol = true)
+var table wl = table.new(position.bottom_right, 4, 9, border_width = 1, frame_color = color.gray, frame_width = 1)
+if showW and barstate.islast
+    syms   = array.from(w1, w2, w3, w4, w5, w6, w7, w8)
+    scores = array.from(s1, s2, s3, s4, s5, s6, s7, s8)
+    moms   = array.from(nz(m1, -9), nz(m2, -9), nz(m3, -9), nz(m4, -9), nz(m5, -9), nz(m6, -9), nz(m7, -9), nz(m8, -9))
+    order  = array.sort_indices(moms, order.descending)
+    head   = color.new(color.gray, 75)
+    table.cell(wl, 0, 0, "Rank", bgcolor = head)
+    table.cell(wl, 1, 0, "Symbol", bgcolor = head)
+    table.cell(wl, 2, 0, "12-1 mom", bgcolor = head)
+    table.cell(wl, 3, 0, "Zone (trend)", bgcolor = head)
+    stars = 0
+    for k = 0 to 7
+        i = array.get(order, k)
+        sc = array.get(scores, i)
+        m = array.get(moms, i)
+        buyZone = not na(sc) and sc >= 3 and m > 0
+        star = buyZone and stars < 3
+        stars += star ? 1 : 0
+        zone = na(sc) or m == -9 ? "no data" : buyZone ? (star ? "⭐ BUY" : "BUY") : sc <= 1 ? "AVOID" : "WAIT"
+        zCol = buyZone ? color.new(color.green, 30) : sc <= 1 ? color.new(color.red, 30) : color.new(color.gray, 60)
+        table.cell(wl, 0, k + 1, str.tostring(k + 1))
+        table.cell(wl, 1, k + 1, array.last(str.split(array.get(syms, i), ":")))
+        table.cell(wl, 2, k + 1, m == -9 ? "n/a" : pct(m))
+        table.cell(wl, 3, k + 1, zone + (na(sc) ? "" : " (" + str.tostring(sc) + "/4)"), bgcolor = zCol, text_color = color.white)
