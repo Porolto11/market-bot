@@ -1,51 +1,111 @@
 //@version=6
-// Market Bot rules for TradingView (paste into the Pine Editor, "Add to chart", use the DAILY timeframe).
-// The same per-stock rules as the Telegram bot: invest_bot/analysis.rate (trend score), the 12-1 momentum,
-// watch.HARD_STOP (20% below the entry) and the core-ETF rule (no trend exit). The Strategy Tester paper-trades
-// them on this one chart with the K&H 0.24% commission (the 3.49 minimum and the 1% FX are not modelled).
-// NOT the bot's strategy: the bot's edge is RANKING ~80 symbols and holding the top ones, which one chart cannot
-// do. On a single index ETF, trend in/out did worse than holding (docs/EXPERIMENTS.md, cycle 9): use core mode.
-strategy("Market Bot rules (paper)", overlay = true, initial_capital = 1000000, currency = currency.NONE,
-     default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
-     commission_type = strategy.commission.percent, commission_value = 0.24, process_orders_on_close = true)
+// Market Bot signals for TradingView: paste into the Pine Editor, "Add to chart", DAILY timeframe.
+// The same per-stock rules as the Telegram bot (all tested in docs/EXPERIMENTS.md):
+//   BUY  = the trend score (invest_bot/analysis.rate) is bullish (>= 3 of 4) and the 12-1 momentum is positive
+//          (no "wait for a dip": waiting cost ~9 pts/yr; no buying dips in leaders: it lost money)
+//   SELL = the trend turns bearish (<= 1), or the close is 20% below the entry (watch.HARD_STOP)
+//   Core ETF mode (VWCE, CSPX, IWDA): hold, no trend exit (trend in/out cost 5-7 pts/yr on SPY), ADD on dips of 8%+
+// The Strategy Tester paper-trades it on this chart with the K&H 0.24% commission (not the 3.49 minimum or 1% FX).
+// Alerts: "Create alert" -> condition: this strategy -> "alert() function calls only".
+// Limit: one chart cannot RANK ~80 symbols, which is where the Telegram bot's edge comes from. Use this to see and
+// time the bot's picks, not as a strategy on its own.
+strategy("Market Bot signals", overlay = true, initial_capital = 1000000, currency = currency.NONE,
+     default_qty_type = strategy.percent_of_equity, default_qty_value = 100, commission_type = strategy.commission.percent,
+     commission_value = 0.24, process_orders_on_close = true, max_labels_count = 500)
 
-stopPct  = input.float(20, "Hard stop below the entry (%)", minval = 1) / 100
-coreMode = input.bool(false, "Core ETF mode: no trend exit (VWCE, CSPX, IWDA)")
-minMom   = input.float(0, "Min 12-1 momentum to enter (%)") / 100
+// ── Inputs
+grpR     = "Rules (the Telegram bot's)"
+stopPct  = input.float(20, "Stop below the entry (%)", minval = 1, group = grpR) / 100
+coreMode = input.bool(false, "Core ETF mode (VWCE, CSPX, IWDA): hold, no trend exit, ADD on dips", group = grpR)
+coreStop = input.bool(true, "Core mode: keep the stop", group = grpR)
+minMom   = input.float(0, "Min 12-1 momentum to buy (%)", group = grpR) / 100
+grpX     = "Extra filter (not in the bot, not backtested)"
+useRS    = input.bool(false, "Only buy when beating the benchmark (12-1 momentum)", group = grpX)
+bench    = input.symbol("AMEX:SPY", "Benchmark", group = grpX)
+showLbl  = input.bool(true, "Show BUY / SELL / ADD labels", group = "Display")
 
+// ── Indicators
 sma50  = ta.sma(close, 50)
 sma200 = ta.sma(close, 200)
 rsi    = ta.rsi(close, 14)
 mom6   = close / close[126] - 1
 mom12  = close / close[252] - 1
 mom121 = close[21] / close[252] - 1  // 12-month momentum without the last month
+bMom   = request.security(bench, timeframe.period, close[21] / close[252] - 1)
+rs     = mom121 - bMom  // > 0: stronger than the benchmark
+dd     = close / ta.highest(close, 252) - 1  // distance from the 52-week high
 
-// analysis.rate: +1 above the 200-day, +1 50-day above 200-day, +1 / +1 positive 6- and 12-month momentum,
+// analysis.rate: +1 above the 200-day, +1 50-day above the 200-day, +1 / +1 positive 6- and 12-month momentum,
 // -1 RSI above 75, +1 RSI below 30 in an uptrend. Bullish >= 3, bearish <= 1.
 score   = (close > sma200 ? 1 : 0) + (sma50 > sma200 ? 1 : 0) + (mom6 > 0 ? 1 : 0) + (mom12 > 0 ? 1 : 0) - (rsi > 75 ? 1 : 0) + (rsi < 30 and close > sma200 ? 1 : 0)
 ready   = bar_index >= 252
 bullish = ready and score >= 3
 bearish = ready and score <= 1
 
-inPos  = strategy.position_size > 0
-stopPx = inPos ? strategy.position_avg_price * (1 - stopPct) : na
+// ── Signals
+inPos    = strategy.position_size > 0
+entryPx  = strategy.position_avg_price
+stopPx   = inPos ? entryPx * (1 - stopPct) : na
+stopHit  = inPos and (not coreMode or coreStop) and close <= stopPx
+trendOut = inPos and not coreMode and bearish
+buyOk    = ready and (coreMode or (bullish and mom121 > minMom and (not useRS or rs > 0)))
+buyNow   = not inPos and buyOk
+sellNow  = stopHit or trendOut
 
-if not inPos and bullish and mom121 > minMom
+// core dips (watch.dips): 8%+ below the 52-week high; again when 5 points deeper or 20 bars later
+var float lastAddDD = na
+var int lastAddBar = na
+addNow = false
+if coreMode and inPos and dd <= -0.08
+    if na(lastAddDD) or dd <= lastAddDD - 0.05 or bar_index - lastAddBar >= 20
+        addNow := true
+        lastAddDD := dd
+        lastAddBar := bar_index
+if dd > -0.08
+    lastAddDD := na
+
+pct(x) => (x >= 0 ? "+" : "") + str.tostring(x * 100, "0.0") + "%"
+px(x) => str.tostring(x, format.mintick)
+
+if buyNow
     strategy.entry("BUY", strategy.long)
-if inPos and ((not coreMode and bearish) or close <= stopPx)
-    strategy.close("BUY", comment = close <= stopPx ? "stop" : "trend bearish")
+    msg = "BUY " + px(close) + "\nstop " + px(close * (1 - stopPct))
+    if showLbl
+        label.new(bar_index, low, msg, yloc = yloc.belowbar, style = label.style_label_up, color = color.new(color.green, 0), textcolor = color.white, size = size.small)
+    alert(syminfo.ticker + " BUY at " + px(close) + ", stop " + px(close * (1 - stopPct)), alert.freq_once_per_bar_close)
+if sellNow
+    why = stopHit ? "stop " + pct(-stopPct) : "trend bearish"
+    result = close / entryPx - 1
+    strategy.close("BUY", comment = why)
+    if showLbl
+        label.new(bar_index, high, "SELL " + px(close) + "\n" + why + " · " + pct(result), yloc = yloc.abovebar, style = label.style_label_down, color = color.new(color.red, 0), textcolor = color.white, size = size.small)
+    alert(syminfo.ticker + " SELL at " + px(close) + ": " + why + " (" + pct(result) + ")", alert.freq_once_per_bar_close)
+if addNow
+    if showLbl
+        label.new(bar_index, low, "ADD\ndip " + pct(dd), yloc = yloc.belowbar, style = label.style_label_up, color = color.new(color.blue, 0), textcolor = color.white, size = size.small)
+    alert(syminfo.ticker + " core ETF dip " + pct(dd) + " below its 52-week high: a moment to add", alert.freq_once_per_bar_close)
 
-plot(sma50, "SMA 50", color = color.blue)
-plot(sma200, "SMA 200", color = color.orange, linewidth = 2)
-plot(stopPx, "Stop (-20%)", color = color.red, style = plot.style_linebr)
-bgcolor(bullish ? color.new(color.green, 90) : bearish ? color.new(color.red, 90) : na)
+// ── Chart
+plot(sma50, "SMA 50", color = color.new(color.blue, 30))
+plot(sma200, "SMA 200", color = color.new(color.orange, 0), linewidth = 2)
+plot(stopPx, "Stop", color = color.red, style = plot.style_linebr, linewidth = 2)
+bgcolor(bullish ? color.new(color.green, 92) : bearish ? color.new(color.red, 92) : na)
 
-var table info = table.new(position.top_right, 2, 3, border_width = 1)
+// ── Status panel
+var table info = table.new(position.top_right, 2, 6, border_width = 1, frame_color = color.gray, frame_width = 1)
 if barstate.islast
-    verdict = bullish ? "bullish" : bearish ? "bearish" : "neutral"
-    table.cell(info, 0, 0, "Trend score", bgcolor = color.new(color.gray, 70))
-    table.cell(info, 1, 0, str.tostring(score) + "/4 " + verdict)
-    table.cell(info, 0, 1, "12-1 momentum", bgcolor = color.new(color.gray, 70))
-    table.cell(info, 1, 1, str.tostring(mom121 * 100, "#.0") + "%")
-    table.cell(info, 0, 2, "RSI 14", bgcolor = color.new(color.gray, 70))
-    table.cell(info, 1, 2, str.tostring(rsi, "#"))
+    status = inPos ? "IN TRADE " + pct(close / entryPx - 1) : buyOk ? "BUY now" : bearish ? "AVOID (bearish)" : "WAIT (trend not up)"
+    sCol   = inPos ? color.new(color.blue, 20) : buyOk ? color.new(color.green, 20) : bearish ? color.new(color.red, 20) : color.new(color.gray, 40)
+    head   = color.new(color.gray, 75)
+    table.cell(info, 0, 0, "Status", bgcolor = head)
+    table.cell(info, 1, 0, status, bgcolor = sCol, text_color = color.white)
+    table.cell(info, 0, 1, "Trend score", bgcolor = head)
+    table.cell(info, 1, 1, str.tostring(score) + "/4 " + (bullish ? "bullish" : bearish ? "bearish" : "neutral"))
+    table.cell(info, 0, 2, "12-1 momentum", bgcolor = head)
+    table.cell(info, 1, 2, pct(mom121))
+    table.cell(info, 0, 3, "vs benchmark", bgcolor = head)
+    table.cell(info, 1, 3, pct(rs))
+    table.cell(info, 0, 4, inPos ? "Stop" : "Stop if bought now", bgcolor = head)
+    table.cell(info, 1, 4, px(inPos ? stopPx : close * (1 - stopPct)))
+    table.cell(info, 0, 5, "From 52w high", bgcolor = head)
+    table.cell(info, 1, 5, pct(dd))
