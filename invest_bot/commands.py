@@ -19,7 +19,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from invest_bot import cloud, fees, fmt, mnb, precheck, prices, rules, scan, state, tax, track
+from invest_bot import cloud, fees, fmt, mnb, paper, precheck, prices, rules, scan, state, tax, track
 
 UPDATES = "https://api.telegram.org/bot{token}/getUpdates?{query}"
 TOP = 10
@@ -40,7 +40,7 @@ HELP = """🤖 Invest Bot commands
 🔄 /refresh — run a fresh full scan now (the message with your buy plan, about 2 minutes)
 🔍 /scan SYM — live analysis of one symbol
 🧱 /core PERCENT — your world-ETF (VWCE) share target, 0-100 (default 50; 0 turns it off)
-📊 /stats — how past calls did vs CSPX
+📊 /stats · 🧪 /paper — how past calls did vs CSPX · the paper bot (1M virtual HUF, trades every call itself)
 🧾 /tax — realised P/L, estimated 15% tax (MNB rates)
 
 ℹ️ Prices in the instrument's currency (comma or dot); HUF in whole forints.
@@ -51,7 +51,7 @@ USAGE = {"bought": "/bought SYM QTY PRICE", "sold": "/sold SYM QTY PRICE", "depo
          "withdraw": "/withdraw AMOUNT [HUF|USD|EUR]", "cash": "/cash AMOUNT [HUF|USD|EUR]", "scan": "/scan SYM", "core": "/core PERCENT (0-100)"}
 MONEY = ("deposit", "withdraw", "cash")  # AMOUNT and an optional currency (default HUF)
 ARGS = {"bought": 3, "sold": 3, "deposit": 1, "withdraw": 1, "cash": 1, "scan": 1, "core": 1,
-        "holdings": 0, "top": 0, "refresh": 0, "stats": 0, "tax": 0, "undo": 0, "help": 0, "start": 0}
+        "holdings": 0, "top": 0, "refresh": 0, "paper": 0, "stats": 0, "tax": 0, "undo": 0, "help": 0, "start": 0}
 CALL = {"BUY": "🟢 BUY", "WAIT": "⏳ WAIT", "WAIT_FOR_DIP": "🪤 WAIT FOR DIP", "HOLD": "✋ HOLD", "SELL": "🔴 SELL",
         "AVOID": "⛔ AVOID"}
 THOUSANDS = re.compile(r"[.,]\d{3}(?!\d)")  # 120.000 or 1,500: a thousands separator, or a decimal?
@@ -346,6 +346,8 @@ def handle(st, text, now, download_fn=prices.download, info_fn=prices.info, mnb_
         return holdings(st, now, download_fn)
     if cmd == "top":
         return top(st)
+    if cmd == "paper":
+        return paper.report(st)
     if cmd == "core":
         try:
             pct = float(args[0].rstrip("%").replace(",", "."))

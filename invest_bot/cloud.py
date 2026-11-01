@@ -42,7 +42,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
-from invest_bot import analysis, fees, fmt, hours, news, prices, scan, state, tax, track, watch
+from invest_bot import analysis, fees, fmt, hours, news, paper, prices, scan, state, tax, track, watch
 from invest_bot.rules import INSTRUMENTS
 
 INDEXES = ("^GSPC", "^STOXX50E")
@@ -292,7 +292,7 @@ def holding_lines(items, portfolio, rates) -> list:
 
 
 def message(items, regime, now, portfolio, cash_huf, has_cash=False, rates=None, alerts=(), switches=(),
-            stops=(), wallet=None) -> str:
+            stops=(), wallet=None, paper_line="") -> str:
     """The scan message (split it with fmt.split before sending). stops: symbols with a sell-type stop alert.
     wallet: the cash per currency; with a foreign balance the header shows each and the HUF total."""
     buys, watch = shown(items)
@@ -342,6 +342,8 @@ def message(items, regime, now, portfolio, cash_huf, has_cash=False, rates=None,
         parts.append("🔴 SELL\n" + "\n".join("\n".join(sell_lines(i, now)) for i in sells))
     if portfolio is not None and portfolio.get("holdings"):
         parts.append("💼 YOUR HOLDINGS\n" + "\n".join(holding_lines(items, portfolio, rates or {})))
+    if paper_line:
+        parts.append(paper_line)
     parts.append(f"ℹ️ {FOOTER}")
     return "\n\n".join(parts)
 
@@ -573,9 +575,10 @@ def run(args, env=None, now=None, download_fn=prices.download, info_fn=prices.in
     dipped, dips = watch.dips(scanned, now, st.get("dips") or {})
     watched = watch.stops(portfolio, st["log"], scanned, items, rates, now, seen) + dipped
     stops = [k.split("|")[1] for k, line in watched if k.startswith("stop|") and "consider selling" in line]
+    traded = paper.step(st, items, scanned, rates, now.date(), st.get("core_share"))  # virtual money only
     text = message(items, regime, now, portfolio, cash, has_cash=secret_cash is not None, rates=rates,
                    alerts=news.alert_lines(fresh, headlines, now) + [line for _, line in watched], switches=switches,
-                   stops=stops, wallet=wallet)
+                   stops=stops, wallet=wallet, paper_line=paper.line(st, traded))
     current = calls(items, switches)
     track.score(st, now.date(), hists)
     track.shadow(st, items, now.date(), hists)
